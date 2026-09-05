@@ -1,5 +1,7 @@
 #include "nearby_board.h"
 
+#include <stddef.h>
+
 #include "driver/gpio.h"
 #include "esp_lcd_panel_st7789.h"
 
@@ -8,6 +10,67 @@
 #define LCD_MAX_TRANSFER_BYTES  (NEARBY_BOARD_LCD_H_RES * 40 * sizeof(uint16_t))
 
 static bool s_spi2_initialized;
+
+/*
+ * Espressif's public ST7789 driver owns reset, geometry and drawing, but its
+ * generic init intentionally stops after SLPOUT/MADCTL/COLMOD/RAMCTRL. Keep
+ * the panel-specific porch/power/gamma values from Waveshare's ESP-IDF board
+ * example instead of carrying their misnamed esp_lcd_sh8601 wrapper.
+ */
+static esp_err_t nearby_board_lcd_apply_vendor_init(esp_lcd_panel_io_handle_t io)
+{
+    static const uint8_t b2[] = {0x0c, 0x0c, 0x00, 0x33, 0x33};
+    static const uint8_t b7[] = {0x35};
+    static const uint8_t bb[] = {0x13};
+    static const uint8_t c0[] = {0x2c};
+    static const uint8_t c2[] = {0x01};
+    static const uint8_t c3[] = {0x0b};
+    static const uint8_t c4[] = {0x20};
+    static const uint8_t c6[] = {0x0f};
+    static const uint8_t d0[] = {0xa4, 0xa1};
+    static const uint8_t d6[] = {0xa1};
+    static const uint8_t e0[] = {
+        0x00, 0x03, 0x07, 0x08, 0x07, 0x15, 0x2a,
+        0x44, 0x42, 0x0a, 0x17, 0x18, 0x25, 0x27,
+    };
+    static const uint8_t e1[] = {
+        0x00, 0x03, 0x08, 0x07, 0x07, 0x23, 0x2a,
+        0x43, 0x42, 0x09, 0x18, 0x17, 0x25, 0x27,
+    };
+
+    struct lcd_init_step {
+        int command;
+        const uint8_t *data;
+        size_t data_size;
+    };
+
+    static const struct lcd_init_step init_steps[] = {
+        {0xb2, b2, sizeof(b2)},
+        {0xb7, b7, sizeof(b7)},
+        {0xbb, bb, sizeof(bb)},
+        {0xc0, c0, sizeof(c0)},
+        {0xc2, c2, sizeof(c2)},
+        {0xc3, c3, sizeof(c3)},
+        {0xc4, c4, sizeof(c4)},
+        {0xc6, c6, sizeof(c6)},
+        {0xd0, d0, sizeof(d0)},
+        {0xd6, d6, sizeof(d6)},
+        {0xe0, e0, sizeof(e0)},
+        {0xe1, e1, sizeof(e1)},
+    };
+
+    for (size_t i = 0; i < sizeof(init_steps) / sizeof(init_steps[0]); ++i) {
+        esp_err_t err = esp_lcd_panel_io_tx_param(io,
+                                                  init_steps[i].command,
+                                                  init_steps[i].data,
+                                                  init_steps[i].data_size);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+
+    return ESP_OK;
+}
 
 esp_err_t nearby_board_spi2_init(void)
 {
@@ -109,6 +172,11 @@ esp_err_t nearby_board_lcd_init(nearby_board_lcd_handles_t *out_handles)
         return err;
     }
 
+    err = nearby_board_lcd_apply_vendor_init(out_handles->io);
+    if (err != ESP_OK) {
+        return err;
+    }
+
     /* The 170px visible area is centered inside the ST7789's 240px RAM. */
     err = esp_lcd_panel_set_gap(out_handles->panel,
                                 NEARBY_BOARD_LCD_X_GAP,
@@ -117,7 +185,7 @@ esp_err_t nearby_board_lcd_init(nearby_board_lcd_handles_t *out_handles)
         return err;
     }
 
-    /* Waveshare's working init sequence enables display inversion (0x21). */
+    /* Waveshare's ESP-IDF board sequence explicitly issues ST7789 INVON. */
     err = esp_lcd_panel_invert_color(out_handles->panel, true);
     if (err != ESP_OK) {
         return err;
