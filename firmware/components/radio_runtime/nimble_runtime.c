@@ -20,11 +20,19 @@ static bool s_ready;
 static bool s_scanning;
 static uint8_t s_own_addr_type;
 
-static void release_nimble_phase_if_owned(void)
+static void latch_scan_fatal(esp_err_t reason)
+{
+    if (reason != ESP_OK) {
+        (void)scan_session_mark_fatal(reason);
+    }
+}
+
+static esp_err_t release_nimble_phase_if_owned(void)
 {
     if (nearby_radio_phase_current() == NEARBY_RADIO_PHASE_NIMBLE) {
-        (void)nearby_radio_phase_release(NEARBY_RADIO_PHASE_NIMBLE);
+        return nearby_radio_phase_release(NEARBY_RADIO_PHASE_NIMBLE);
     }
+    return ESP_OK;
 }
 
 static void nearby_nimble_on_reset(int reason)
@@ -98,9 +106,14 @@ esp_err_t nearby_nimble_driver_init(TickType_t sync_timeout_ticks)
     }
     return ESP_OK;
 
-fail_phase:
-    release_nimble_phase_if_owned();
-    return err;
+fail_phase: {
+        esp_err_t phase_err = release_nimble_phase_if_owned();
+        if (phase_err != ESP_OK) {
+            latch_scan_fatal(phase_err);
+            return phase_err;
+        }
+        return err;
+    }
 }
 
 esp_err_t nearby_nimble_scan_start(uint32_t duration_ms, bool passive)
@@ -118,7 +131,7 @@ esp_err_t nearby_nimble_scan_start(uint32_t duration_ms, bool passive)
      */
     uint16_t duration_units = 0;
     if (duration_ms != 0) {
-        const uint32_t rounded_units = (duration_ms + 9U) / 10U;
+        const uint32_t rounded_units = duration_ms / 10U + (duration_ms % 10U != 0U ? 1U : 0U);
         if (rounded_units > UINT16_MAX) return ESP_ERR_INVALID_ARG;
         duration_units = (uint16_t)rounded_units;
     }
@@ -168,8 +181,9 @@ esp_err_t nearby_nimble_driver_deinit(void)
     if (!s_initialized) {
         s_ready = false;
         s_scanning = false;
-        release_nimble_phase_if_owned();
-        return ESP_OK;
+        esp_err_t phase_err = release_nimble_phase_if_owned();
+        if (phase_err != ESP_OK) latch_scan_fatal(phase_err);
+        return phase_err;
     }
 
     esp_err_t first_err = ESP_OK;
@@ -177,11 +191,14 @@ esp_err_t nearby_nimble_driver_deinit(void)
 
     int rc = nimble_port_stop();
     if (rc != 0) {
+        /* Host task may still own controller resources; do not release gate. */
+        latch_scan_fatal(ESP_FAIL);
         return first_err != ESP_OK ? first_err : ESP_FAIL;
     }
 
     rc = nimble_port_deinit();
     if (rc != ESP_OK) {
+        latch_scan_fatal(rc);
         return first_err != ESP_OK ? first_err : rc;
     }
 
@@ -189,6 +206,7 @@ esp_err_t nearby_nimble_driver_deinit(void)
     s_ready = false;
     s_scanning = false;
     esp_err_t phase_err = nearby_radio_phase_release(NEARBY_RADIO_PHASE_NIMBLE);
+    if (phase_err != ESP_OK) latch_scan_fatal(phase_err);
     return first_err != ESP_OK ? first_err : phase_err;
 }
 
