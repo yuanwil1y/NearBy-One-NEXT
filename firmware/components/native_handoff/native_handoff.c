@@ -27,6 +27,17 @@ static QueueHandle_t s_ble_free_q;
 static QueueHandle_t s_ble_ready_q;
 static volatile uint32_t s_ble_drops;
 
+#if MYNEWT_VAL(BLE_EXT_ADV)
+static nearby_ble_ext_disc_record_t s_ble_ext_slots[NEARBY_BLE_EXT_RX_SLOT_COUNT];
+static StaticQueue_t s_ble_ext_free_q_struct;
+static StaticQueue_t s_ble_ext_ready_q_struct;
+static uint8_t s_ble_ext_free_q_storage[NEARBY_BLE_EXT_RX_SLOT_COUNT * sizeof(uint8_t)];
+static uint8_t s_ble_ext_ready_q_storage[NEARBY_BLE_EXT_RX_SLOT_COUNT * sizeof(uint8_t)];
+static QueueHandle_t s_ble_ext_free_q;
+static QueueHandle_t s_ble_ext_ready_q;
+static volatile uint32_t s_ble_ext_drops;
+#endif
+
 static nearby_i154_rx_record_t s_i154_slots[NEARBY_I154_RX_SLOT_COUNT];
 static StaticQueue_t s_i154_free_q_struct;
 static StaticQueue_t s_i154_ready_q_struct;
@@ -168,55 +179,122 @@ uint32_t nearby_wifi_rx_drop_count(void)
 
 esp_err_t nearby_ble_handoff_init(void)
 {
-    return init_index_queues(&s_ble_free_q,
-                             &s_ble_ready_q,
-                             &s_ble_free_q_struct,
-                             &s_ble_ready_q_struct,
-                             s_ble_free_q_storage,
-                             s_ble_ready_q_storage,
-                             NEARBY_BLE_RX_SLOT_COUNT);
-}
-
-int nearby_nimble_gap_event_cb(struct ble_gap_event *event, void *arg)
-{
-    (void)arg;
-
-    if (event == NULL || event->type != BLE_GAP_EVENT_DISC) {
-        return 0;
+    esp_err_t err = init_index_queues(&s_ble_free_q,
+                                      &s_ble_ready_q,
+                                      &s_ble_free_q_struct,
+                                      &s_ble_ready_q_struct,
+                                      s_ble_free_q_storage,
+                                      s_ble_ready_q_storage,
+                                      NEARBY_BLE_RX_SLOT_COUNT);
+    if (err != ESP_OK) {
+        return err;
     }
 
-    if (s_ble_free_q == NULL || s_ble_ready_q == NULL) {
+#if MYNEWT_VAL(BLE_EXT_ADV)
+    err = init_index_queues(&s_ble_ext_free_q,
+                            &s_ble_ext_ready_q,
+                            &s_ble_ext_free_q_struct,
+                            &s_ble_ext_ready_q_struct,
+                            s_ble_ext_free_q_storage,
+                            s_ble_ext_ready_q_storage,
+                            NEARBY_BLE_EXT_RX_SLOT_COUNT);
+#endif
+    return err;
+}
+
+static void queue_legacy_disc(const struct ble_gap_disc_desc *desc)
+{
+    if (desc == NULL || s_ble_free_q == NULL || s_ble_ready_q == NULL) {
         ++s_ble_drops;
-        return 0;
+        return;
     }
 
     uint8_t slot_index;
     if (xQueueReceive(s_ble_free_q, &slot_index, 0) != pdTRUE) {
         ++s_ble_drops;
-        return 0;
+        return;
     }
 
     nearby_ble_disc_record_t *slot = &s_ble_slots[slot_index];
-    slot->desc = event->disc;
-    slot->original_length_data = event->disc.length_data;
-    const uint16_t copied_len = event->disc.length_data > NEARBY_BLE_LEGACY_DATA_MAX
+    slot->desc = *desc;
+    slot->original_length_data = desc->length_data;
+    const uint16_t copied_len = desc->length_data > NEARBY_BLE_LEGACY_DATA_MAX
                                     ? NEARBY_BLE_LEGACY_DATA_MAX
-                                    : event->disc.length_data;
-    slot->truncated = copied_len != event->disc.length_data;
+                                    : desc->length_data;
+    slot->truncated = copied_len != desc->length_data;
 
-    if (copied_len > 0 && event->disc.data != NULL) {
-        memcpy(slot->data, event->disc.data, copied_len);
+    if (copied_len > 0 && desc->data != NULL) {
+        memcpy(slot->data, desc->data, copied_len);
     }
 
     /* Keep B on the native descriptor while making its pointer durable. */
     slot->desc.data = slot->data;
-    slot->desc.length_data = copied_len;
+    slot->desc.length_data = (uint8_t)copied_len;
 
     if (xQueueSend(s_ble_ready_q, &slot_index, 0) != pdTRUE) {
         (void)xQueueSend(s_ble_free_q, &slot_index, 0);
         ++s_ble_drops;
     }
+}
 
+#if MYNEWT_VAL(BLE_EXT_ADV)
+static void queue_extended_disc(const struct ble_gap_ext_disc_desc *desc)
+{
+    if (desc == NULL || s_ble_ext_free_q == NULL || s_ble_ext_ready_q == NULL) {
+        ++s_ble_ext_drops;
+        return;
+    }
+
+    uint8_t slot_index;
+    if (xQueueReceive(s_ble_ext_free_q, &slot_index, 0) != pdTRUE) {
+        ++s_ble_ext_drops;
+        return;
+    }
+
+    nearby_ble_ext_disc_record_t *slot = &s_ble_ext_slots[slot_index];
+    slot->desc = *desc;
+    slot->original_length_data = desc->length_data;
+    const uint16_t copied_len = desc->length_data > NEARBY_BLE_EXT_DATA_MAX
+                                    ? NEARBY_BLE_EXT_DATA_MAX
+                                    : desc->length_data;
+    slot->truncated = copied_len != desc->length_data;
+
+    if (copied_len > 0 && desc->data != NULL) {
+        memcpy(slot->data, desc->data, copied_len);
+    }
+
+    /*
+     * Preserve props/data_status/SID/PHY exactly. Incomplete controller reports
+     * remain separate records; D deliberately does not perform reassembly.
+     */
+    slot->desc.data = slot->data;
+    slot->desc.length_data = (uint8_t)copied_len;
+
+    if (xQueueSend(s_ble_ext_ready_q, &slot_index, 0) != pdTRUE) {
+        (void)xQueueSend(s_ble_ext_free_q, &slot_index, 0);
+        ++s_ble_ext_drops;
+    }
+}
+#endif
+
+int nearby_nimble_gap_event_cb(struct ble_gap_event *event, void *arg)
+{
+    (void)arg;
+
+    if (event == NULL) {
+        return 0;
+    }
+
+    if (event->type == BLE_GAP_EVENT_DISC) {
+        queue_legacy_disc(&event->disc);
+        return 0;
+    }
+
+#if MYNEWT_VAL(BLE_EXT_ADV)
+    if (event->type == BLE_GAP_EVENT_EXT_DISC) {
+        queue_extended_disc(&event->ext_disc);
+    }
+#endif
     return 0;
 }
 
@@ -255,6 +333,44 @@ uint32_t nearby_ble_rx_drop_count(void)
 {
     return s_ble_drops;
 }
+
+#if MYNEWT_VAL(BLE_EXT_ADV)
+esp_err_t nearby_ble_ext_disc_take(nearby_ble_ext_disc_record_t **out, TickType_t timeout_ticks)
+{
+    if (out == NULL || s_ble_ext_ready_q == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t slot_index;
+    if (xQueueReceive(s_ble_ext_ready_q, &slot_index, timeout_ticks) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    *out = &s_ble_ext_slots[slot_index];
+    return ESP_OK;
+}
+
+esp_err_t nearby_ble_ext_disc_release(nearby_ble_ext_disc_record_t *record)
+{
+    if (record == NULL || s_ble_ext_free_q == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    for (uint8_t i = 0; i < NEARBY_BLE_EXT_RX_SLOT_COUNT; ++i) {
+        if (record == &s_ble_ext_slots[i]) {
+            return xQueueSend(s_ble_ext_free_q, &i, 0) == pdTRUE
+                       ? ESP_OK
+                       : ESP_ERR_INVALID_STATE;
+        }
+    }
+    return ESP_ERR_INVALID_ARG;
+}
+
+uint32_t nearby_ble_ext_rx_drop_count(void)
+{
+    return s_ble_ext_drops;
+}
+#endif
 
 static void IRAM_ATTR nearby_i154_rx_done_isr(uint8_t *frame,
                                                esp_ieee802154_frame_info_t *frame_info)
