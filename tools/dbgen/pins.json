@@ -3,7 +3,12 @@
   "home_assistant_core": {
     "repository": "home-assistant/core",
     "revision": "2a1c7d1a864ed7cf9f6fb16c8a0ece7d01e16d48",
-    "source_path": "homeassistant/generated/bluetooth.py",
+    "source_paths": [
+      "homeassistant/generated/bluetooth.py",
+      "homeassistant/generated/zeroconf.py",
+      "homeassistant/generated/ssdp.py",
+      "homeassistant/generated/dhcp.py"
+    ],
     "license_spdx": "Apache-2.0"
   },
   "zha_device_handlers": {
@@ -11,5 +16,11 @@
     "revision": "6a3822c1348f9e40ad243eb881084a1c075da277",
     "source_path": "zhaquirks",
     "license_spdx": "Apache-2.0"
+  },
+  "zigbee_herdsman_converters": {
+    "repository": "Koenkk/zigbee-herdsman-converters",
+    "revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+    "source_path": "src/devices",
+    "license_spdx": "MIT"
   }
 }

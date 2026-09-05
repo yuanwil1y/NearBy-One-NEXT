@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
-"""Build and report a recognition DB from already-fetched pinned upstream trees.
-
-This script never imports or executes upstream Python. It delegates to the mechanical
-AST extractors in nearby_dbgen.py and emits a machine-readable coverage proof.
-"""
+"""Build and report a recognition DB from real, immutable upstream pins."""
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
 from pathlib import Path
-import struct
 import time
-from types import SimpleNamespace
 
+import full_dbgen
 import nearby_dbgen
 
 
@@ -43,7 +38,11 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--pins", required=True)
     p.add_argument("--ha-bluetooth", required=True)
+    p.add_argument("--ha-zeroconf", required=True)
+    p.add_argument("--ha-ssdp", required=True)
+    p.add_argument("--ha-dhcp", required=True)
     p.add_argument("--zha-root", required=True)
+    p.add_argument("--z2m-root", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--report", required=True)
     args = p.parse_args()
@@ -51,23 +50,25 @@ def main() -> None:
     pins = json.loads(Path(args.pins).read_text(encoding="utf-8"))
     ha_rev = pins["home_assistant_core"]["revision"]
     zha_rev = pins["zha_device_handlers"]["revision"]
+    z2m_rev = pins["zigbee_herdsman_converters"]["revision"]
     build_epoch = int(pins["build_epoch"])
     out = Path(args.out)
 
-    build_args = SimpleNamespace(
-        ha_bluetooth=args.ha_bluetooth,
-        ha_rev=ha_rev,
-        zha_root=args.zha_root,
-        zha_rev=zha_rev,
-        oui_csv=None,
-        oui_rev="unknown",
-        db_version=1,
-        build_epoch=build_epoch,
-        out=str(out),
-    )
-
     t0 = time.perf_counter()
-    nearby_dbgen.build(build_args)
+    build_summary = full_dbgen.build_database(
+        ha_bluetooth=Path(args.ha_bluetooth),
+        ha_zeroconf=Path(args.ha_zeroconf),
+        ha_ssdp=Path(args.ha_ssdp),
+        ha_dhcp=Path(args.ha_dhcp),
+        ha_rev=ha_rev,
+        zha_root=Path(args.zha_root),
+        zha_rev=zha_rev,
+        z2m_root=Path(args.z2m_root),
+        z2m_rev=z2m_rev,
+        out=out,
+        db_version=2,
+        build_epoch=build_epoch,
+    )
     build_ms = round((time.perf_counter() - t0) * 1000, 3)
 
     t1 = time.perf_counter()
@@ -105,8 +106,8 @@ def main() -> None:
     sources = manifest.get("sources", [])
     blocked = sum(1 for src in sources if src.get("redistribution") != "allowed")
     report = {
-        "report_schema": 1,
-        "scope": "full pinned HA generated Bluetooth + full pinned ZHA zhaquirks tree",
+        "report_schema": 2,
+        "scope": "full pinned HA generated Bluetooth/Zeroconf/SSDP/DHCP + full pinned ZHA + static pinned Z2M identity extraction",
         "pins": pins,
         "generator": manifest.get("generator"),
         "db": {
@@ -114,8 +115,10 @@ def main() -> None:
             "bytes": out.stat().st_size,
             "sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
             "record_count": record_total,
+            "raw_record_count": build_summary["raw_records"],
             "normalized_unique_key_count": record_total,
             "conflict_count": manifest.get("conflict_count", 0),
+            "conflict_keys_sample": manifest.get("conflict_keys_sample", []),
             "parser_required_count": parser_required_count,
             "blocked_nonredistributable_source_count": blocked,
         },
@@ -124,14 +127,18 @@ def main() -> None:
             "by_protocol": dict(sorted(protocol_counts.items())),
             "by_record_type": dict(sorted(record_counts.items())),
         },
+        "extraction": manifest.get("extraction", {}),
         "timing_ms": {"build": build_ms, "release_validation": validation_ms},
         "representative_lookups": lookup_smoke,
         "release_validation": {"ok": True, "errors": []},
         "build_command": (
             "python tools/dbgen/build_pinned.py --pins tools/dbgen/pins.json "
             "--ha-bluetooth <HA>/homeassistant/generated/bluetooth.py "
-            "--zha-root <ZHA>/zhaquirks --out artifacts/pinned/nearby.nbdb "
-            "--report docs/db/coverage-pinned.json"
+            "--ha-zeroconf <HA>/homeassistant/generated/zeroconf.py "
+            "--ha-ssdp <HA>/homeassistant/generated/ssdp.py "
+            "--ha-dhcp <HA>/homeassistant/generated/dhcp.py "
+            "--zha-root <ZHA>/zhaquirks --z2m-root <Z2M>/src/devices "
+            "--out artifacts/pinned/nearby.nbdb --report docs/db/coverage-pinned.json"
         ),
     }
     report_path = Path(args.report)

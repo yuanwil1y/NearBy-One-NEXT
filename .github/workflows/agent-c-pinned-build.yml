@@ -6,11 +6,8 @@ on:
       - agent-c/device-database
     paths:
       - .github/workflows/agent-c-pinned-build.yml
+      - tools/dbgen/*.py
       - tools/dbgen/pins.json
-      - tools/dbgen/build_pinned.py
-      - tools/dbgen/nearby_dbgen.py
-      - tools/dbgen/preflight.py
-      - tools/dbgen/test_*.py
 
 permissions:
   contents: write
@@ -30,14 +27,17 @@ jobs:
         run: |
           echo "ha=$(python -c 'import json; print(json.load(open("tools/dbgen/pins.json"))["home_assistant_core"]["revision"])')" >> "$GITHUB_OUTPUT"
           echo "zha=$(python -c 'import json; print(json.load(open("tools/dbgen/pins.json"))["zha_device_handlers"]["revision"])')" >> "$GITHUB_OUTPUT"
+          echo "z2m=$(python -c 'import json; print(json.load(open("tools/dbgen/pins.json"))["zigbee_herdsman_converters"]["revision"])')" >> "$GITHUB_OUTPUT"
 
-      - name: Fetch pinned Home Assistant generated Bluetooth source
+      - name: Fetch pinned Home Assistant generated discovery files
         shell: bash
         run: |
           mkdir -p /tmp/nearby-ha/homeassistant/generated
-          curl --fail --location --silent --show-error \
-            "https://raw.githubusercontent.com/home-assistant/core/${{ steps.pins.outputs.ha }}/homeassistant/generated/bluetooth.py" \
-            --output /tmp/nearby-ha/homeassistant/generated/bluetooth.py
+          for name in bluetooth zeroconf ssdp dhcp; do
+            curl --fail --location --silent --show-error \
+              "https://raw.githubusercontent.com/home-assistant/core/${{ steps.pins.outputs.ha }}/homeassistant/generated/${name}.py" \
+              --output "/tmp/nearby-ha/homeassistant/generated/${name}.py"
+          done
 
       - name: Fetch pinned ZHA source tree without executing it
         shell: bash
@@ -46,6 +46,14 @@ jobs:
           git -C /tmp/nearby-zha remote add origin https://github.com/zigpy/zha-device-handlers.git
           git -C /tmp/nearby-zha -c protocol.version=2 fetch --depth=1 --filter=blob:none origin "${{ steps.pins.outputs.zha }}"
           git -C /tmp/nearby-zha checkout --detach FETCH_HEAD
+
+      - name: Fetch pinned Zigbee2MQTT converter sources without executing them
+        shell: bash
+        run: |
+          git init /tmp/nearby-z2m
+          git -C /tmp/nearby-z2m remote add origin https://github.com/Koenkk/zigbee-herdsman-converters.git
+          git -C /tmp/nearby-z2m -c protocol.version=2 fetch --depth=1 --filter=blob:none origin "${{ steps.pins.outputs.z2m }}"
+          git -C /tmp/nearby-z2m checkout --detach FETCH_HEAD
 
       - name: Run host corruption and generator tests
         run: python -m unittest discover -s tools/dbgen -p 'test_*.py' -v
@@ -56,7 +64,11 @@ jobs:
           python tools/dbgen/build_pinned.py \
             --pins tools/dbgen/pins.json \
             --ha-bluetooth /tmp/nearby-ha/homeassistant/generated/bluetooth.py \
+            --ha-zeroconf /tmp/nearby-ha/homeassistant/generated/zeroconf.py \
+            --ha-ssdp /tmp/nearby-ha/homeassistant/generated/ssdp.py \
+            --ha-dhcp /tmp/nearby-ha/homeassistant/generated/dhcp.py \
             --zha-root /tmp/nearby-zha/zhaquirks \
+            --z2m-root /tmp/nearby-z2m/src/devices \
             --out artifacts/pinned/nearby.nbdb \
             --report docs/db/coverage-pinned.json
           python tools/dbgen/preflight.py artifacts/pinned/nearby.nbdb --release
@@ -70,5 +82,5 @@ jobs:
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m "Update real pinned recognition DB coverage proof"
+          git commit -m "Update expanded pinned recognition DB coverage proof"
           git push origin HEAD:agent-c/device-database
