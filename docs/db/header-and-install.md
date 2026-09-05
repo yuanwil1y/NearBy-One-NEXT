@@ -1,8 +1,10 @@
-# NearBy Recognition DB header and pre-format validation contract (v0)
+# NearBy Recognition DB header and whole-SD install contract (v0)
 
-## Goal
+## Product rule
 
-A browser or ESP32-C6 must be able to reject an incompatible/corrupt database **before SD formatting is started**. Browser validation runs against the local upload file; the device repeats validation before replacing the active DB.
+Recognition DB import is **destructive for the entire SD card** in v0.1. Formatting/reinitialization deletes every existing SD file. Agent C defines only the recognition-file validation and success semantics; Agent D owns FAT/SD formatting and the upload/write loop, and Agent E owns the warning/progress UI.
+
+There is no previous-generation preservation, generation pointer, rollback directory, or promise that an old DB remains available after formatting.
 
 ## File header
 
@@ -20,7 +22,7 @@ All integer fields are little-endian. Header size is fixed at 128 bytes for sche
 | 24 | 4 | `min_reader_abi` | minimum firmware DB reader ABI |
 | 28 | 4 | `source_count` | number of source records in manifest |
 | 32 | 8 | `file_size` | exact total bytes of the `.nbdb` file |
-| 40 | 8 | `manifest_offset` | absolute offset; v0 normally `128` |
+| 40 | 8 | `manifest_offset` | absolute offset; v0 must be `128` |
 | 48 | 8 | `manifest_size` | manifest bytes |
 | 56 | 8 | `payload_offset` | first byte after manifest |
 | 64 | 8 | `payload_size` | bytes from payload offset to EOF |
@@ -30,48 +32,85 @@ All integer fields are little-endian. Header size is fixed at 128 bytes for sche
 | 112 | 8 | `build_epoch` | Unix seconds; informational, not trusted for compatibility |
 | 120 | 8 | `reserved` | must be zero in v0 |
 
-The manifest is canonical UTF-8 JSON in the PoC. It records source provenance, shard directory entries, build tool version, and licensing state. Final payload shards can change encoding without changing the pre-format validation sequence as long as the header/container contract remains compatible.
+The manifest is canonical UTF-8 JSON in the PoC and carries source provenance, pinned revisions, classification and redistribution state. Payload/index encoding can evolve behind the container contract while schema/reader compatibility remains explicit.
 
-## Browser validation before destructive formatting
+## Browser/local-source preflight — before format
 
-Given a user-selected `.nbdb` file, the Web Portal MUST perform all of these checks before it enables or calls SD format:
+The complete local `.nbdb` source MUST pass preflight before destructive formatting can be enabled. The browser may read it incrementally; it does not need to buffer the entire file.
 
-1. File length is at least 128 bytes and equals `file_size`.
-2. `magic`, `format_major`, `header_size`, `schema_version`, and `min_reader_abi` are supported by the target firmware.
-3. Header CRC32 matches after zeroing `header_crc32`.
-4. Manifest and payload ranges are non-overlapping, monotonic, inside `file_size`, and `payload_offset + payload_size == file_size`.
-5. Manifest JSON parses, its source count equals `source_count`, and every source has provenance/license/redistribution fields.
-6. No manifest source has `redistribution` = `review-required` or `reference-only` for a release-mode install unless the release policy explicitly allows it.
-7. Stream through the local file once to verify `payload_crc32` and SHA-256. This can be done in the browser without touching the SD card.
-8. Only after all checks pass may the UI offer the destructive format/install action.
+Required checks:
 
-A bad header therefore cannot trigger SD formatting. Payload integrity also gets checked before format because the source file is already locally readable by the browser.
+1. source length is at least 128 bytes;
+2. magic, format major, header size, schema version and reader ABI are compatible;
+3. header CRC32 matches;
+4. declared file size equals the local file size;
+5. manifest/payload ranges are monotonic, non-overlapping and inside the file;
+6. manifest parses and `source_count` matches;
+7. every source has stable provenance, pinned revision, license, redistribution state, classification and transform metadata;
+8. release-mode install rejects any source not explicitly `allowed`;
+9. payload CRC32 matches after streaming the complete payload;
+10. SHA-256 matches whenever the SHA flag is present/required.
 
-## Device-side streaming install
+The machine-facing preflight status is intentionally small:
 
-The device repeats the cheap header checks before writing. The upload/install path writes to `/nearby/db/.staging/nearby.nbdb`, computes CRC32/SHA-256 while streaming, fsyncs/closes, reopens and validates the final file, then atomically promotes the staging generation. The previous generation remains active until promotion succeeds.
+```text
+ok / safe_to_format
+policy_mode: development | release
+install_model: whole_sd_destructive_v0_1
+destructive: true
+active_path: /nearby/db/nearby.nbdb
+temporary_path: /nearby/db/nearby.nbdb.part
+post_format_failure: no_usable_db_guaranteed
+errors[]
+```
 
-Success criteria:
+`safe_to_format` MUST be false for every truncated, corrupt, incompatible or policy-blocked source. A valid preflight is permission to *offer* the destructive action, not permission to format without explicit user confirmation.
 
-- no full DB or full shard is buffered in RAM;
-- bounded transfer buffer target: <= 16 KiB;
-- received byte count exactly equals `file_size`;
-- computed payload CRC32 and SHA-256 match the header;
-- manifest passes compatibility/license policy checks;
-- post-write reopen succeeds and header revalidates;
-- only then update `/nearby/db/current` (or equivalent generation pointer).
+## Install state machine
 
-Power loss or upload cancellation before promotion leaves the previous generation usable and the staging generation disposable.
+```text
+SELECT_SOURCE
+  -> PREFLIGHT_LOCAL_SOURCE
+  -> WAIT_EXPLICIT_DESTRUCTIVE_CONFIRMATION
+  -> FORMAT_WHOLE_SD                 # owned by D; irreversible
+  -> CREATE /nearby/db/
+  -> STREAM nearby.nbdb.part         # owned by D; bounded buffer
+  -> VERIFY_RECEIVED_FILE
+  -> RENAME nearby.nbdb.part -> nearby.nbdb
+  -> ACTIVE
+```
 
-## Proposed SD layout
+After `FORMAT_WHOLE_SD`, the old contents are gone. Cancellation, power loss, I/O failure, length mismatch, CRC/SHA failure, manifest failure, or reopen failure after that point may leave **no usable recognition DB**. Recovery is simply another import attempt; v0.1 has no generation manager or rollback promise.
+
+The device may repeat cheap header/compatibility checks before accepting bytes and MUST compute stream length/integrity while D writes. Those checks are defense in depth; they do not change the destructive failure semantics.
+
+## Post-format success criteria
+
+Promotion to the active filename is permitted only when all of the following are true:
+
+- transfer uses bounded RAM; target transfer/integrity scratch remains <= 16 KiB;
+- received byte count equals header `file_size` exactly;
+- payload CRC32 and SHA-256 equal the header values;
+- manifest/source policy still passes the selected install mode;
+- closed file can be reopened and the container/header/ranges revalidated;
+- only then is `nearby.nbdb.part` renamed/promoted to `nearby.nbdb`.
+
+If verification fails, `nearby.nbdb.part` is not an active DB. Agent C does not prescribe whether D deletes the failed `.part` immediately or on the next format/import.
+
+## SD layout
+
+Normal runtime:
 
 ```text
 /nearby/db/
-  current                 # tiny generation pointer / metadata
-  gen-00000042/
-    nearby.nbdb           # v0 container; later may become header+manifest + shards
-  .staging/
-    nearby.nbdb.part
+  nearby.nbdb
 ```
 
-The logical payload directory in the manifest is protocol-sharded (`bluetooth`, `zigbee`, `lan`, `matter`, `vendors`) with sorted indexes and a deduplicated string table. Runtime session Device/Entity/State data is never stored here.
+Only during an import after format:
+
+```text
+/nearby/db/
+  nearby.nbdb.part
+```
+
+No `/current`, `gen-*`, rollback tree, runtime Device/Entity/State persistence, or user-file preservation is part of the v0.1 recognition DB contract.
