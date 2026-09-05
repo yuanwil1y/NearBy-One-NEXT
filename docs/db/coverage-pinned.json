@@ -1,10 +1,10 @@
 {
-  "build_command": "python tools/dbgen/build_pinned.py --pins tools/dbgen/pins.json --ha-bluetooth <HA>/homeassistant/generated/bluetooth.py --ha-zeroconf <HA>/homeassistant/generated/zeroconf.py --ha-ssdp <HA>/homeassistant/generated/ssdp.py --ha-dhcp <HA>/homeassistant/generated/dhcp.py --zha-root <ZHA>/zhaquirks --z2m-root <Z2M>/src/devices --bt-company-ids <BT>/v1/company_ids.json --bt-service-uuids <BT>/v1/service_uuids.json --out artifacts/pinned/nearby.nbdb --report docs/db/coverage-pinned.json",
+  "build_command": "python tools/dbgen/build_pinned.py --pins tools/dbgen/pins.json --ha-bluetooth <HA>/homeassistant/generated/bluetooth.py --ha-zeroconf <HA>/homeassistant/generated/zeroconf.py --ha-ssdp <HA>/homeassistant/generated/ssdp.py --ha-dhcp <HA>/homeassistant/generated/dhcp.py --zha-root <ZHA>/zhaquirks --z2m-root <Z2M>/src/devices --bt-company-ids <BT>/v1/company_ids.json --bt-service-uuids <BT>/v1/service_uuids.json --zigbee-manufacturer-codes <ZH>/src/zspec/zcl/definition/manufacturerCode.ts --zigbee-consts <ZH>/src/zspec/consts.ts --out artifacts/pinned/nearby.nbdb --report docs/db/coverage-pinned.json",
   "coverage": {
     "by_protocol_runtime_keys": {
       "ble": 4389,
       "lan": 711,
-      "zigbee": 7739
+      "zigbee": 8466
     },
     "by_record_type_runtime_keys": {
       "bluetooth_company_id": 4022,
@@ -17,20 +17,23 @@
       "recognition_ambiguity": 8,
       "z2m_fingerprint": 2372,
       "z2m_zigbee_model": 4682,
-      "zha_manufacturer_model": 677
+      "zha_manufacturer_model": 677,
+      "zigbee_manufacturer_code": 723,
+      "zigbee_profile_id": 4
     },
     "by_source_raw_claims": {
       "bluetooth_numbers_nordic": 4151,
       "ha_core": 949,
       "z2m_converters": 7069,
-      "zha_quirks": 679
+      "zha_quirks": 679,
+      "zigbee_herdsman_defs": 727
     }
   },
   "db": {
     "ambiguity_index_flag_count": 8,
     "ambiguous_key_count": 8,
     "blocked_nonredistributable_source_count": 0,
-    "bytes": 4553653,
+    "bytes": 4797809,
     "conflict_count": 8,
     "conflict_ledger": [
       {
@@ -381,12 +384,12 @@
         ]
       }
     ],
-    "normalized_unique_key_count": 12839,
+    "normalized_unique_key_count": 13566,
     "parser_required_claim_count": 679,
     "path": "artifacts/pinned/nearby.nbdb",
-    "raw_record_count": 12848,
-    "record_count": 12839,
-    "sha256": "a8c19cfa89018dc54fa95d300b990e0d5d5f6e6ebaec01ab915001dd2421049c"
+    "raw_record_count": 13575,
+    "record_count": 13566,
+    "sha256": "96c8ed365f533697bf65ea1242bee4b6d4788f8c75d45e42350126baa2cb64ce"
   },
   "extraction": {
     "raw_records_by_extractor": {
@@ -397,7 +400,8 @@
       "ha_ssdp": 91,
       "ha_zeroconf": 163,
       "z2m": 7069,
-      "zha": 679
+      "zha": 679,
+      "zigbee_assigned_numbers": 727
     },
     "z2m": {
       "definition_objects": 4478,
@@ -411,7 +415,7 @@
   },
   "generator": {
     "name": "full_dbgen.py",
-    "version": 5
+    "version": 6
   },
   "pins": {
     "bluetooth_numbers_nordic": {
@@ -446,13 +450,22 @@
       "repository": "Koenkk/zigbee-herdsman-converters",
       "revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
       "source_path": "src/devices"
+    },
+    "zigbee_herdsman_defs": {
+      "license_spdx": "MIT",
+      "repository": "Koenkk/zigbee-herdsman",
+      "revision": "467b2842776b84f2deb8a095a500d64a12acf5ed",
+      "source_paths": [
+        "src/zspec/zcl/definition/manufacturerCode.ts",
+        "src/zspec/consts.ts"
+      ]
     }
   },
   "release_validation": {
     "errors": [],
     "ok": true
   },
-  "report_schema": 4,
+  "report_schema": 5,
   "representative_lookups": [
     {
       "key": "ble:assigned:company:0000",
@@ -508,11 +521,21 @@
       "key": "zigbee:\u0002KE\u001fTRADFRI open/close remote",
       "record_type": "zha_manufacturer_model",
       "status": "matched"
+    },
+    {
+      "key": "zigbee:assigned:manufacturer:0000",
+      "record_type": "zigbee_manufacturer_code",
+      "status": "matched"
+    },
+    {
+      "key": "zigbee:assigned:profile:0104",
+      "record_type": "zigbee_profile_id",
+      "status": "matched"
     }
   ],
-  "scope": "full pinned HA generated Bluetooth/Zeroconf/SSDP/DHCP + full pinned ZHA + static pinned Z2M identity extraction + pinned redistributable Bluetooth assigned numbers",
+  "scope": "full pinned HA generated Bluetooth/Zeroconf/SSDP/DHCP + full pinned ZHA + static pinned Z2M identity extraction + pinned redistributable Bluetooth assigned numbers + pinned MIT Zigbee manufacturer/profile identifiers",
   "timing_ms": {
-    "build": 2629.333,
-    "release_validation": 6.104
+    "build": 2653.753,
+    "release_validation": 6.295
   }
 }
