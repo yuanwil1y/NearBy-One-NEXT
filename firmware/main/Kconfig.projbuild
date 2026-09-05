@@ -5,14 +5,69 @@ menu "NearBy One Agent-D bench harness"
         default n
         help
             BENCH_REQUIRED. Sequentially starts/stops the three native radio
-            paths inside one complete scan session. Keep disabled in normal
-            firmware so boot never starts a discovery scan automatically.
+            paths inside one complete scan session, drains bounded handoff
+            records and reports first-event latency/drop counters. Keep disabled
+            in normal firmware so boot never starts discovery automatically.
 
     config NEARBY_AGENT_D_BOARD_IO_SMOKE
         bool "Probe CST816 and mount SD at boot"
         default n
         help
-            BENCH_REQUIRED. Reads one raw CST816 sample and mounts FATFS on the
+            BENCH_REQUIRED. Reads raw CST816 samples and mounts FATFS on the
             LCD-shared SPI2 bus. This option never formats the SD card.
+
+    config NEARBY_AGENT_D_LCD_VISUAL_BENCH
+        bool "Draw LCD orientation/corner/color test pattern at boot"
+        default n
+        help
+            BENCH_REQUIRED. Draws a deterministic ST7789 pattern for visual
+            validation of orientation, 35-pixel gap, inversion and corners.
+
+    config NEARBY_AGENT_D_TOUCH_BENCH
+        bool "Log CST816 raw touch range for interactive corner test"
+        default n
+        help
+            BENCH_REQUIRED. Logs raw touch coordinates for 30 seconds so all
+            four corners and orientation can be physically checked.
+
+    config NEARBY_AGENT_D_SD_IO_BENCH
+        bool "Run non-destructive SD write/read throughput test"
+        default n
+        help
+            BENCH_REQUIRED. Creates, fsyncs, verifies and removes a temporary
+            file on the shared-SPI FATFS. Existing card contents are preserved.
+
+    config NEARBY_AGENT_D_SD_DESTRUCTIVE_BENCH
+        bool "DESTRUCTIVE: whole-SD format smoke"
+        default n
+        help
+            BENCH_REQUIRED AND DESTRUCTIVE. Erases old partition metadata and
+            reformats the entire inserted SD card. Use only a disposable test
+            card. This bypasses the product C-preflight flow only to bench the
+            board-level D storage primitive itself.
+
+    config NEARBY_AGENT_D_WEB_BENCH
+        bool "Run temporary SoftAP/HTTP bench window"
+        default n
+        help
+            BENCH_REQUIRED. Starts the existing Web Management backend, logs
+            temporary credentials/address, keeps it available for 120 seconds,
+            then stops it and checks gate release.
+
+    config NEARBY_AGENT_D_SPI_CONTENTION_BENCH
+        bool "Run simultaneous LCD + SD shared-SPI contention bench"
+        default n
+        help
+            BENCH_REQUIRED. Writes a bounded temporary SD file from a worker
+            while the main task repeatedly flushes LCD stripes; reports latency
+            and throughput without adding a second SPI transaction lock.
+
+    config NEARBY_AGENT_D_STRESS_BENCH
+        bool "Run repeated hardware lifecycle stress"
+        default n
+        help
+            BENCH_REQUIRED. Executes 100 scan/radio and SD mount/unmount cycles
+            plus repeated temporary Web Management start/stop cycles. Intended
+            only for a supervised physical-board test.
 
 endmenu
