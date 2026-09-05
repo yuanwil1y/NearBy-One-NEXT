@@ -12,10 +12,8 @@ import ha_lan_sources
 import nearby_dbgen
 import z2m_sources
 
-
-COLLISION_WINNER_REASON = (
-    "deterministic canonical-JSON lexical tiebreak; no semantic merge; manual review required"
-)
+AMBIGUOUS_INDEX_FLAG = 0x0001
+CANDIDATE_ORDER_REASON = "canonical-JSON lexical order for reproducibility only; not recognition precedence"
 
 
 def _source_manifest(ha_rev: str, zha_rev: str, z2m_rev: str) -> list[dict[str, Any]]:
@@ -50,35 +48,87 @@ def _source_manifest(ha_rev: str, zha_rev: str, z2m_rev: str) -> list[dict[str, 
     ]
 
 
+def _ambiguity_record(key: str, candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    source_ids = sorted({str(rec.get("source_id", "unknown")) for rec in candidates})
+    return {
+        "key": key,
+        "record_type": "recognition_ambiguity",
+        "match_status": "ambiguous",
+        "candidate_count": len(candidates),
+        "source_ids": source_ids,
+        "candidate_order": CANDIDATE_ORDER_REASON,
+        "candidates": candidates,
+    }
+
+
 def dedupe_with_ledger(
     records: Iterable[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Deduplicate exact claims and fail closed for unresolved key collisions.
+
+    Canonical JSON ordering is used only to make candidate ordering reproducible.
+    It MUST NOT select a semantic winner. A collided key becomes one ambiguity
+    envelope at runtime and retains all distinct candidate claims/provenance.
+    """
     grouped: dict[str, dict[bytes, dict[str, Any]]] = {}
     for rec in records:
         key = rec["key"]
         grouped.setdefault(key, {})[nearby_dbgen.canonical_json(rec)] = rec
 
-    winners: list[dict[str, Any]] = []
+    runtime_records: list[dict[str, Any]] = []
     ledger: list[dict[str, Any]] = []
     for key in sorted(grouped):
         candidates = [
             rec for _canonical, rec in sorted(grouped[key].items(), key=lambda item: item[0])
         ]
-        winner = candidates[0]
-        winners.append(winner)
-        if len(candidates) > 1:
-            ledger.append(
-                {
-                    "key": key,
-                    "sources": sorted({str(rec.get("source_id", "unknown")) for rec in candidates}),
-                    "candidate_count": len(candidates),
-                    "candidates": candidates,
-                    "winner": winner,
-                    "winner_reason": COLLISION_WINNER_REASON,
-                    "manual_review": True,
-                }
-            )
-    return winners, ledger
+        if len(candidates) == 1:
+            runtime_records.append(candidates[0])
+            continue
+
+        ambiguity = _ambiguity_record(key, candidates)
+        runtime_records.append(ambiguity)
+        ledger.append(
+            {
+                "key": key,
+                "sources": ambiguity["source_ids"],
+                "candidate_count": len(candidates),
+                "candidates": candidates,
+                "resolution": "unresolved_ambiguous",
+                "runtime_result": "ambiguous",
+                "candidate_order": CANDIDATE_ORDER_REASON,
+                "manual_review": True,
+            }
+        )
+    return runtime_records, ledger
+
+
+def build_flat_payload(records: list[dict[str, Any]]) -> bytes:
+    """Build the flat payload and mark ambiguity in the index itself.
+
+    The flag lets the bounded C reader return NEARBY_DB_AMBIGUOUS without parsing
+    JSON. The value still carries complete candidates/provenance for inspection.
+    """
+    blob = bytearray()
+    entries = bytearray()
+    for rec in records:
+        key = rec["key"].encode("utf-8")
+        value = nearby_dbgen.canonical_json({k: v for k, v in rec.items() if k != "key"})
+        if len(key) > 0xFFFF:
+            raise ValueError("key too long")
+        key_off = len(blob)
+        blob += key
+        value_off = len(blob)
+        blob += value
+        flags = AMBIGUOUS_INDEX_FLAG if rec.get("match_status") == "ambiguous" else 0
+        entries += nearby_dbgen.FLAT_ENTRY.pack(key_off, len(key), flags, value_off, len(value))
+    blob_offset = nearby_dbgen.FLAT_HEADER.size + len(entries)
+    return nearby_dbgen.FLAT_HEADER.pack(
+        nearby_dbgen.FLAT_MAGIC,
+        len(records),
+        nearby_dbgen.FLAT_ENTRY.size,
+        nearby_dbgen.FLAT_HEADER.size,
+        blob_offset,
+    ) + entries + blob
 
 
 def build_database(
@@ -114,7 +164,7 @@ def build_database(
         raw_records.extend(records)
 
     records, conflict_ledger = dedupe_with_ledger(raw_records)
-    payload = nearby_dbgen.build_flat_payload(records)
+    payload = build_flat_payload(records)
     sources = _source_manifest(ha_rev, zha_rev, z2m_rev)
 
     counts: dict[str, int] = {}
@@ -132,15 +182,25 @@ def build_database(
         "raw_record_count": len(raw_records),
         "record_counts": dict(sorted(counts.items())),
         "conflict_count": len(conflict_ledger),
+        "ambiguous_key_count": len(conflict_ledger),
         "conflict_keys_sample": [entry["key"] for entry in conflict_ledger[:50]],
         "conflict_ledger": conflict_ledger,
+        "conflict_policy": {
+            "unresolved_collision": "return_ambiguity",
+            "lexical_order_is_precedence": False,
+            "index_ambiguous_flag": AMBIGUOUS_INDEX_FLAG,
+        },
         "sources": sources,
         "extraction": {
             "raw_records_by_extractor": dict(sorted(raw_counts.items())),
             "z2m": z2m_stats,
         },
-        "payload": {"encoding": "sorted-flat-records-v1", "key_order": "utf8-byte-lexicographic"},
-        "generator": {"name": "full_dbgen.py", "version": 3},
+        "payload": {
+            "encoding": "sorted-flat-records-v1",
+            "key_order": "utf8-byte-lexicographic",
+            "index_flags": {"0x0001": "ambiguous; value ref valid; not a confirmed match"},
+        },
+        "generator": {"name": "full_dbgen.py", "version": 4},
     }
     manifest_bytes = nearby_dbgen.canonical_json(manifest)
     file_size = nearby_dbgen.HEADER_SIZE + len(manifest_bytes) + len(payload)
@@ -160,6 +220,7 @@ def build_database(
         "raw_records": len(raw_records),
         "counts": dict(sorted(counts.items())),
         "conflicts": len(conflict_ledger),
+        "ambiguous_keys": len(conflict_ledger),
         "conflict_ledger": conflict_ledger,
         "extraction": manifest["extraction"],
     }

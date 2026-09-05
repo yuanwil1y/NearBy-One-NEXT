@@ -10,6 +10,7 @@
 #define NBY_READER_ABI 1u
 #define NBY_FLAT_ENTRY_SIZE 16u
 #define NBY_COMPARE_CHUNK 64u
+#define NBY_KNOWN_VALUE_FLAGS NEARBY_DB_VALUE_FLAG_AMBIGUOUS
 
 static const uint8_t k_db_magic[8] = {'N','B','Y','D','B',0,'\r','\n'};
 static const uint8_t k_flat_magic[8] = {'N','B','Y','F','L','T','1',0};
@@ -139,15 +140,18 @@ void nearby_db_close(nearby_db_t *db) {
 }
 
 static nearby_db_result_t read_entry(nearby_db_t *db, uint32_t index, uint32_t *key_off,
-                                     uint16_t *key_len, uint32_t *value_off, uint32_t *value_len) {
+                                     uint16_t *key_len, uint16_t *flags,
+                                     uint32_t *value_off, uint32_t *value_len) {
     uint8_t e[NBY_FLAT_ENTRY_SIZE];
     if (index >= db->record_count) return NEARBY_DB_ERR_RANGE;
     nearby_db_result_t rc = read_exact(db->fp, db->index_offset + (uint64_t)index * NBY_FLAT_ENTRY_SIZE, e, sizeof(e));
     if (rc != NEARBY_DB_OK) return rc;
     *key_off = rd32(e);
     *key_len = rd16(e + 4);
+    *flags = rd16(e + 6);
     *value_off = rd32(e + 8);
     *value_len = rd32(e + 12);
+    if ((*flags & (uint16_t)~NBY_KNOWN_VALUE_FLAGS) != 0u) return NEARBY_DB_ERR_UNSUPPORTED;
     return NEARBY_DB_OK;
 }
 
@@ -178,8 +182,8 @@ nearby_db_result_t nearby_db_find(nearby_db_t *db, const char *key, size_t key_l
     while (lo < hi) {
         uint32_t mid = lo + (hi - lo) / 2;
         uint32_t ko, vo, vl;
-        uint16_t kl;
-        nearby_db_result_t rc = read_entry(db, mid, &ko, &kl, &vo, &vl);
+        uint16_t kl, flags;
+        nearby_db_result_t rc = read_entry(db, mid, &ko, &kl, &flags, &vo, &vl);
         if (rc != NEARBY_DB_OK) return rc;
         int cmp = 0;
         rc = compare_stored_key(db, ko, kl, (const uint8_t *)key, key_len, &cmp);
@@ -189,8 +193,8 @@ nearby_db_result_t nearby_db_find(nearby_db_t *db, const char *key, size_t key_l
     }
     if (lo >= db->record_count) return NEARBY_DB_ERR_NOT_FOUND;
     uint32_t ko, vo, vl;
-    uint16_t kl;
-    nearby_db_result_t rc = read_entry(db, lo, &ko, &kl, &vo, &vl);
+    uint16_t kl, flags;
+    nearby_db_result_t rc = read_entry(db, lo, &ko, &kl, &flags, &vo, &vl);
     if (rc != NEARBY_DB_OK) return rc;
     int cmp = 0;
     rc = compare_stored_key(db, ko, kl, (const uint8_t *)key, key_len, &cmp);
@@ -201,6 +205,8 @@ nearby_db_result_t nearby_db_find(nearby_db_t *db, const char *key, size_t key_l
     }
     out_ref->value_offset = db->blob_offset + vo;
     out_ref->value_size = vl;
+    out_ref->flags = flags;
+    if ((flags & NEARBY_DB_VALUE_FLAG_AMBIGUOUS) != 0u) return NEARBY_DB_AMBIGUOUS;
     return NEARBY_DB_OK;
 }
 
