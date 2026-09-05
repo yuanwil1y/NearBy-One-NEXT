@@ -90,12 +90,11 @@ fail:
     return err;
 }
 
-esp_err_t nearby_wifi_active_scan(wifi_ap_record_t *records,
-                                  uint16_t *inout_count,
-                                  bool show_hidden)
+static esp_err_t perform_active_scan(wifi_ap_record_t *records,
+                                     uint16_t *inout_count,
+                                     bool show_hidden)
 {
-    if (scan_session_require_scan_owner() != ESP_OK ||
-        records == NULL || inout_count == NULL || *inout_count == 0) {
+    if (records == NULL || inout_count == NULL || *inout_count == 0) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -115,8 +114,27 @@ esp_err_t nearby_wifi_active_scan(wifi_ap_record_t *records,
     if (err != ESP_OK) {
         return err;
     }
-
     return esp_wifi_scan_get_ap_records(inout_count, records);
+}
+
+esp_err_t nearby_wifi_active_scan(wifi_ap_record_t *records,
+                                  uint16_t *inout_count,
+                                  bool show_hidden)
+{
+    if (scan_session_require_scan_owner() != ESP_OK) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    return perform_active_scan(records, inout_count, show_hidden);
+}
+
+esp_err_t nearby_wifi_portal_scan(wifi_ap_record_t *records,
+                                  uint16_t *inout_count,
+                                  bool show_hidden)
+{
+    if (scan_session_require_competing_owner() != ESP_OK) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    return perform_active_scan(records, inout_count, show_hidden);
 }
 
 esp_err_t nearby_wifi_promiscuous_start(uint8_t channel, uint32_t filter_mask)
@@ -202,8 +220,11 @@ esp_err_t nearby_wifi_set_mode(wifi_mode_t mode)
 
 esp_err_t nearby_wifi_set_ap_config(const wifi_config_t *config)
 {
-    if (config == NULL || scan_session_require_competing_owner() != ESP_OK) {
+    if (config == NULL) {
         return ESP_ERR_INVALID_ARG;
+    }
+    if (scan_session_require_competing_owner() != ESP_OK) {
+        return ESP_ERR_INVALID_STATE;
     }
     esp_err_t err = nearby_wifi_driver_init();
     if (err != ESP_OK) {
@@ -214,8 +235,11 @@ esp_err_t nearby_wifi_set_ap_config(const wifi_config_t *config)
 
 esp_err_t nearby_wifi_set_sta_config(const wifi_config_t *config)
 {
-    if (config == NULL || scan_session_require_competing_owner() != ESP_OK) {
+    if (config == NULL) {
         return ESP_ERR_INVALID_ARG;
+    }
+    if (scan_session_require_competing_owner() != ESP_OK) {
+        return ESP_ERR_INVALID_STATE;
     }
     esp_err_t err = nearby_wifi_driver_init();
     if (err != ESP_OK) {
