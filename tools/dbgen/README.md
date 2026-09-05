@@ -7,7 +7,7 @@ Agent C tooling is PC-side and deliberately static: it converts pinned upstream 
 `pins.json` is the source of truth for the release-proof revisions. The GitHub Actions proof fetches only those immutable revisions and builds:
 
 - Home Assistant generated Bluetooth matchers;
-- Home Assistant generated Zeroconf, SSDP and DHCP matchers;
+- Home Assistant generated HomeKit model matchers plus Zeroconf, SSDP and DHCP matchers;
 - ZHA literal manufacturer/model + simple `QuirkBuilder`/`applies_to` identifiers;
 - Zigbee2MQTT literal `zigbeeModel`, literal manufacturer/model fingerprints and common `tuya.fingerprint(...)` literal arguments.
 
@@ -37,14 +37,6 @@ Different claims for one normalized key are never silently treated as resolved. 
 ## Legacy focused PoC and OUI input
 
 `nearby_dbgen.py build` remains useful for focused HA Bluetooth/ZHA/OUI experiments. OUI input is an IEEE-style CSV supplied at build time; bulk OUI output is `review-required` until redistribution terms are cleared, so `validate --release` rejects an OUI-inclusive PoC by default.
-
-```bash
-python tools/dbgen/nearby_dbgen.py build \
-  --ha-bluetooth ../core/homeassistant/generated/bluetooth.py --ha-rev <ha-commit> \
-  --zha-root ../zha-device-handlers/zhaquirks --zha-rev <zha-commit> \
-  --oui-csv ./oui.csv --oui-rev <registry-date-or-hash> \
-  --db-version 1 --out build/nearby-test.nbdb
-```
 
 ## Bounded lookup
 

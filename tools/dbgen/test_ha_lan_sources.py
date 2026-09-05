@@ -4,7 +4,10 @@ import unittest
 
 import ha_lan_sources
 
-ZEROCONF = '''HOMEKIT = {"Demo": {"domain": "demo", "always_discover": True}}
+ZEROCONF = '''HOMEKIT = {
+ "Demo*": {"domain": "demo", "always_discover": True},
+ "Other": {"domain": "demo2", "always_discover": False},
+}
 ZEROCONF = {
  "_demo._tcp.local.": [
    {"domain": "demo"},
@@ -27,7 +30,18 @@ DHCP: Final[list[dict[str, str | bool]]] = [
 
 
 class HaLanSourcesTest(unittest.TestCase):
-    def test_extracts_generated_zeroconf_matchers_without_homekit_runtime(self):
+    def test_extracts_generated_homekit_model_matchers(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "zeroconf.py"
+            p.write_text(ZEROCONF)
+            records = ha_lan_sources.extract_ha_homekit(p, "ha-pin")
+        self.assertEqual(len(records), 2)
+        by_model = {r["model_pattern"]: r for r in records}
+        self.assertEqual(by_model["Demo*"]["domain"], "demo")
+        self.assertTrue(by_model["Demo*"]["matcher"]["always_discover"])
+        self.assertEqual(by_model["Demo*"]["key"], "lan:homekit:model:Demo*\x1fdemo")
+
+    def test_extracts_generated_zeroconf_matchers(self):
         with tempfile.TemporaryDirectory() as td:
             p = Path(td) / "zeroconf.py"
             p.write_text(ZEROCONF)

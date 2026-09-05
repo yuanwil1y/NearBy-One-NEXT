@@ -8,7 +8,7 @@ import nearby_dbgen
 HA_BLE = '''from typing import Final
 BLUETOOTH: Final[list[dict]] = [{"domain":"demo","manufacturer_id":123}]
 '''
-HA_ZERO = '''HOMEKIT = {}
+HA_ZERO = '''HOMEKIT = {"Demo*": {"domain": "demo", "always_discover": True}}
 ZEROCONF = {"_demo._tcp.local.": [{"domain": "demo", "properties": {"model": "x*"}}]}
 '''
 HA_SSDP = '''SSDP = {"demo": [{"st": "urn:demo:1", "manufacturer": "Acme"}]}
@@ -60,9 +60,10 @@ class FullDbgenTest(unittest.TestCase):
             validation = nearby_dbgen.validate_file(out, release=True)
             self.assertTrue(validation["ok"], validation["errors"])
             self.assertEqual(len(validation["manifest"]["sources"]), 3)
-            self.assertEqual(summary["raw_records"], 7)
+            self.assertEqual(summary["raw_records"], 8)
             expected_types = {
                 "ha_bluetooth_matcher",
+                "ha_homekit_model_matcher",
                 "ha_zeroconf_matcher",
                 "ha_ssdp_matcher",
                 "ha_dhcp_matcher",
@@ -71,6 +72,7 @@ class FullDbgenTest(unittest.TestCase):
                 "z2m_fingerprint",
             }
             self.assertEqual(set(summary["counts"]), expected_types)
+            self.assertIsNotNone(nearby_dbgen.lookup(out, "lan:homekit:model:Demo*\x1fdemo"))
             for key in (
                 "lan:zeroconf:_demo._tcp.local.\x1fdemo\x1f",
                 "lan:ssdp:st:urn:demo:1\x1fdemo\x1f",

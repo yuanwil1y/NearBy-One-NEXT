@@ -53,13 +53,6 @@ def _source_manifest(ha_rev: str, zha_rev: str, z2m_rev: str) -> list[dict[str, 
 def dedupe_with_ledger(
     records: Iterable[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Dedupe keys deterministically while retaining complete differing claims.
-
-    Identical duplicate records are collapsed silently. Differing records for the
-    same normalized key produce a provenance ledger entry. The current winner rule
-    intentionally does not pretend to resolve semantics: canonical JSON order is a
-    deterministic runtime tiebreak and every such collision remains manual-review.
-    """
     grouped: dict[str, dict[bytes, dict[str, Any]]] = {}
     for rec in records:
         key = rec["key"]
@@ -105,6 +98,7 @@ def build_database(
 ) -> dict[str, Any]:
     by_extractor: dict[str, list[dict[str, Any]]] = {
         "ha_bluetooth": nearby_dbgen.extract_ha_bluetooth(ha_bluetooth, ha_rev),
+        "ha_homekit": ha_lan_sources.extract_ha_homekit(ha_zeroconf, ha_rev),
         "ha_zeroconf": ha_lan_sources.extract_ha_zeroconf(ha_zeroconf, ha_rev),
         "ha_ssdp": ha_lan_sources.extract_ha_ssdp(ha_ssdp, ha_rev),
         "ha_dhcp": ha_lan_sources.extract_ha_dhcp(ha_dhcp, ha_rev),
@@ -146,7 +140,7 @@ def build_database(
             "z2m": z2m_stats,
         },
         "payload": {"encoding": "sorted-flat-records-v1", "key_order": "utf8-byte-lexicographic"},
-        "generator": {"name": "full_dbgen.py", "version": 2},
+        "generator": {"name": "full_dbgen.py", "version": 3},
     }
     manifest_bytes = nearby_dbgen.canonical_json(manifest)
     file_size = nearby_dbgen.HEADER_SIZE + len(manifest_bytes) + len(payload)

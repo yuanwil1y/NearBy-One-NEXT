@@ -42,6 +42,32 @@ def _common(record_type: str, revision: str) -> dict[str, Any]:
     }
 
 
+def extract_ha_homekit(path: Path, revision: str) -> list[dict[str, Any]]:
+    """Extract HA's generated HomeKit model-pattern -> integration metadata."""
+    raw = _assignment_literal(path, "HOMEKIT")
+    if not isinstance(raw, dict):
+        raise ValueError("HOMEKIT must be a dict")
+    out: list[dict[str, Any]] = []
+    for model_pattern in sorted(raw):
+        matcher = raw[model_pattern]
+        if (
+            not isinstance(model_pattern, str)
+            or not isinstance(matcher, dict)
+            or not isinstance(matcher.get("domain"), str)
+        ):
+            continue
+        domain = matcher["domain"]
+        rec = _common("ha_homekit_model_matcher", revision)
+        rec.update(
+            key=f"lan:homekit:model:{model_pattern}\x1f{domain}",
+            model_pattern=model_pattern,
+            domain=domain,
+            matcher=matcher,
+        )
+        out.append(rec)
+    return out
+
+
 def extract_ha_zeroconf(path: Path, revision: str) -> list[dict[str, Any]]:
     raw = _assignment_literal(path, "ZEROCONF")
     if not isinstance(raw, dict):
