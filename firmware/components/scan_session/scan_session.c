@@ -8,6 +8,7 @@ static SemaphoreHandle_t s_gate;
 static TaskHandle_t s_scan_owner;
 static TaskHandle_t s_competing_owner;
 static uint32_t s_generation;
+static esp_err_t s_fatal_error = ESP_OK;
 static portMUX_TYPE s_state_lock = portMUX_INITIALIZER_UNLOCKED;
 
 static TaskHandle_t current_task(void)
@@ -36,6 +37,7 @@ esp_err_t scan_session_begin(TickType_t timeout_ticks)
     portENTER_CRITICAL(&s_state_lock);
     s_scan_owner = current_task();
     s_competing_owner = NULL;
+    s_fatal_error = ESP_OK;
     ++s_generation;
     portEXIT_CRITICAL(&s_state_lock);
     return ESP_OK;
@@ -50,11 +52,49 @@ esp_err_t scan_session_require_scan_owner(void)
     return owner != NULL && owner == current_task() ? ESP_OK : ESP_ERR_INVALID_STATE;
 }
 
+esp_err_t scan_session_mark_fatal(esp_err_t reason)
+{
+    if (reason == ESP_OK || scan_session_require_scan_owner() != ESP_OK) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    portENTER_CRITICAL(&s_state_lock);
+    if (s_fatal_error == ESP_OK) {
+        s_fatal_error = reason;
+    }
+    portEXIT_CRITICAL(&s_state_lock);
+    return ESP_OK;
+}
+
+esp_err_t scan_session_fatal_error(void)
+{
+    esp_err_t fatal;
+    portENTER_CRITICAL(&s_state_lock);
+    fatal = s_fatal_error;
+    portEXIT_CRITICAL(&s_state_lock);
+    return fatal;
+}
+
+esp_err_t scan_session_recovery_clear_fatal(void)
+{
+    if (scan_session_require_scan_owner() != ESP_OK) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    portENTER_CRITICAL(&s_state_lock);
+    s_fatal_error = ESP_OK;
+    portEXIT_CRITICAL(&s_state_lock);
+    return ESP_OK;
+}
+
 esp_err_t scan_session_end(void)
 {
     if (s_gate == NULL || scan_session_require_scan_owner() != ESP_OK) {
         return ESP_ERR_INVALID_STATE;
     }
+    if (scan_session_fatal_error() != ESP_OK) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
     portENTER_CRITICAL(&s_state_lock);
     s_scan_owner = NULL;
     portEXIT_CRITICAL(&s_state_lock);
@@ -91,6 +131,7 @@ esp_err_t scan_session_competing_op_try_begin(void)
     portENTER_CRITICAL(&s_state_lock);
     s_competing_owner = current_task();
     s_scan_owner = NULL;
+    s_fatal_error = ESP_OK;
     portEXIT_CRITICAL(&s_state_lock);
     return ESP_OK;
 }
