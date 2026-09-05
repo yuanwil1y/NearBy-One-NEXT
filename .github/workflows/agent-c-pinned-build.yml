@@ -45,7 +45,7 @@ jobs:
           git init /tmp/nearby-zha
           git -C /tmp/nearby-zha remote add origin https://github.com/zigpy/zha-device-handlers.git
           git -C /tmp/nearby-zha -c protocol.version=2 fetch --depth=1 --filter=blob:none origin "${{ steps.pins.outputs.zha }}"
-          git -C /tmp/nearby-zha checkout --detach FETCH_HEAD -- zhaquirks
+          git -C /tmp/nearby-zha checkout --detach FETCH_HEAD
 
       - name: Run host corruption and generator tests
         run: python -m unittest discover -s tools/dbgen -p 'test_*.py' -v
