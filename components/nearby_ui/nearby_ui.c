@@ -23,9 +23,13 @@
 #if LVGL_VERSION_MAJOR >= 9
 #define NB_SCREEN_LOAD(screen) lv_screen_load(screen)
 #define NB_SCREEN_ACTIVE() lv_screen_active()
+#define NB_BUTTON_CREATE(parent) lv_button_create(parent)
+#define NB_OBJ_DELETE(obj) lv_obj_delete(obj)
 #else
 #define NB_SCREEN_LOAD(screen) lv_scr_load(screen)
 #define NB_SCREEN_ACTIVE() lv_scr_act()
+#define NB_BUTTON_CREATE(parent) lv_btn_create(parent)
+#define NB_OBJ_DELETE(obj) lv_obj_del(obj)
 #endif
 
 typedef struct {
@@ -158,8 +162,9 @@ static void portal_stop_clicked(lv_event_t *event)
     if (g.cb.portal_stop_requested) g.cb.portal_stop_requested(g.cb.ctx);
     g.portal_running = false;
     if (g.portal_modal) {
-        lv_obj_del(g.portal_modal);
+        NB_OBJ_DELETE(g.portal_modal);
         g.portal_modal = NULL;
+        g.portal_state_label = NULL;
     }
 }
 
@@ -180,7 +185,7 @@ static void portal_start_clicked(lv_event_t *event)
 
 static lv_obj_t *make_icon_button(lv_obj_t *parent, const char *symbol)
 {
-    lv_obj_t *button = lv_btn_create(parent);
+    lv_obj_t *button = NB_BUTTON_CREATE(parent);
     lv_obj_set_size(button, 30, 30);
     lv_obj_set_style_radius(button, 8, 0);
     lv_obj_set_style_bg_opa(button, LV_OPA_TRANSP, 0);
@@ -360,7 +365,7 @@ static void add_entity_row(lv_obj_t *parent, const mock_entity_t *entity)
             lv_slider_set_value(slider, entity->value, LV_ANIM_OFF);
         }
     } else if (strcmp(entity->domain, "button") == 0) {
-        lv_obj_t *button = lv_btn_create(card);
+        lv_obj_t *button = NB_BUTTON_CREATE(card);
         lv_obj_set_size(button, 58, 28);
         lv_obj_align(button, LV_ALIGN_RIGHT_MID, 0, 0);
         lv_obj_t *button_label = lv_label_create(button);
@@ -379,7 +384,7 @@ static void show_detail(size_t index)
     if (index >= g.device_count || !g.devices[index].used) return;
     g.selected_device = index;
 
-    if (g.detail_screen) lv_obj_del(g.detail_screen);
+    if (g.detail_screen) NB_OBJ_DELETE(g.detail_screen);
     g.detail_screen = lv_obj_create(NULL);
     style_screen(g.detail_screen);
     make_top_bar(g.detail_screen, false, g.devices[index].name);
@@ -415,7 +420,7 @@ static void show_detail(size_t index)
 static void render_portal_modal(void)
 {
     if (!g.settings_screen) return;
-    if (g.portal_modal) lv_obj_del(g.portal_modal);
+    if (g.portal_modal) NB_OBJ_DELETE(g.portal_modal);
 
     g.portal_modal = lv_obj_create(g.settings_screen);
     lv_obj_set_size(g.portal_modal, 158, 202);
@@ -450,7 +455,7 @@ static void render_portal_modal(void)
     lv_obj_set_style_text_color(g.portal_state_label, lv_color_hex(NB_MUTED), 0);
     lv_obj_align(g.portal_state_label, LV_ALIGN_TOP_LEFT, 0, 28);
 
-    lv_obj_t *stop = lv_btn_create(g.portal_modal);
+    lv_obj_t *stop = NB_BUTTON_CREATE(g.portal_modal);
     lv_obj_set_size(stop, 116, 32);
     lv_obj_align(stop, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_t *stop_label = lv_label_create(stop);
@@ -461,7 +466,11 @@ static void render_portal_modal(void)
 
 static void show_settings(void)
 {
-    if (g.settings_screen) lv_obj_del(g.settings_screen);
+    if (g.settings_screen) {
+        g.portal_modal = NULL;
+        g.portal_state_label = NULL;
+        NB_OBJ_DELETE(g.settings_screen);
+    }
     g.settings_screen = lv_obj_create(NULL);
     style_screen(g.settings_screen);
     make_top_bar(g.settings_screen, false, "Settings");
@@ -475,7 +484,7 @@ static void show_settings(void)
     lv_obj_set_style_pad_row(content, 7, 0);
     lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *portal = lv_btn_create(content);
+    lv_obj_t *portal = NB_BUTTON_CREATE(content);
     lv_obj_set_size(portal, 154, 42);
     lv_obj_set_style_bg_color(portal, lv_color_hex(NB_BLUE), 0);
     lv_obj_set_style_radius(portal, 10, 0);
@@ -546,6 +555,8 @@ void nearby_ui_scan_begin(uint16_t total_modules)
 {
     if (g.scan_state == NEARBY_UI_SCAN_SCANNING) return;
     if (total_modules == 0) total_modules = 1;
+
+    if (NB_SCREEN_ACTIVE() != g.home_screen) show_home();
 
     g.scan_state = NEARBY_UI_SCAN_SCANNING;
     g.scan_total = total_modules;
