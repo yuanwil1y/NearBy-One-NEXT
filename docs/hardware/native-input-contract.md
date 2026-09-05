@@ -1,255 +1,212 @@
 # Native scanner input contract (Agent D -> Agent B)
 
-This is deliberately **not** a NearBy packet abstraction. Agent B consumes the native ESP-IDF / ESP-NimBLE structures directly where their lifetime permits it. If data crosses a callback/task boundary, D copies only the native metadata plus bytes that would otherwise expire.
+Target: ESP32-C6, ESP-IDF v6.1.
 
-The first pass targets ESP32-C6 public APIs in current ESP-IDF. Re-check field availability against the exact ESP-IDF version selected for the firmware before freezing ABI assumptions.
+This is deliberately **not** a NearBy packet abstraction. Agent B consumes native ESP-IDF / ESP-NimBLE records. D only makes callback-scoped bytes durable where required and owns driver lifecycle, bounded queues, drop accounting and RF hardware exclusion.
 
 ## 1. Wi-Fi active scan
 
-### Entry point
+D owns:
 
-Headers: `esp_wifi.h`, `esp_wifi_types.h`
-
-```c
-esp_wifi_scan_start(const wifi_scan_config_t *config, bool block);
-esp_wifi_scan_get_ap_num(uint16_t *number);
-esp_wifi_scan_get_ap_records(uint16_t *number, wifi_ap_record_t *ap_records);
+```text
+scan-session owner
+ -> esp_netif / esp_wifi init
+ -> WIFI_STORAGE_RAM
+ -> active esp_wifi_scan_start
+ -> esp_wifi_scan_get_ap_records
+ -> B consumes caller-owned wifi_ap_record_t records
+ -> stop/deinit before another RF phase
 ```
 
-### B receives
+B receives `wifi_ap_record_t` directly. The records array is application-owned; B must not retain a pointer after the owning array is reused or freed.
 
-Pass `wifi_ap_record_t` records directly to B during the worker call that owns the caller-allocated records array. Useful native fields include SSID, BSSID, primary channel, RSSI, authentication mode, cipher information and PHY capability flags as supplied by the selected ESP-IDF version.
-
-### Lifetime / context
-
-The records array is application-owned. No callback-lifetime issue exists after `esp_wifi_scan_get_ap_records()` returns. B must not retain a pointer after the owning array is released/reused.
-
-### Arbitration
-
-An active scan is RF work. It may run only inside the exclusive scan session, or as a standalone RF operation after acquiring the same gate. UI/device interaction paths must return busy while the full scan session owns the gate.
-
----
+A product discovery scan requires the complete scan-session gate. Portal Wi-Fi scans instead run only inside the temporary Web Management competing-operation lease.
 
 ## 2. Wi-Fi promiscuous RX
 
-### Entry point
+D registers the native `wifi_promiscuous_cb_t`. Treat the callback `buf`, `wifi_promiscuous_pkt_t` and payload as driver-owned and valid only until callback return.
 
-Headers: `esp_wifi.h`, `esp_wifi_types.h`
-
-```c
-typedef void (*wifi_promiscuous_cb_t)(void *buf,
-                                      wifi_promiscuous_pkt_type_t type);
-
-esp_err_t esp_wifi_set_promiscuous_rx_cb(wifi_promiscuous_cb_t cb);
-esp_err_t esp_wifi_set_promiscuous_filter(const wifi_promiscuous_filter_t *filter);
-esp_err_t esp_wifi_set_promiscuous(bool en);
-esp_err_t esp_wifi_set_channel(uint8_t primary, wifi_second_chan_t second);
-```
-
-For `WIFI_PKT_MGMT`, `WIFI_PKT_CTRL`, and `WIFI_PKT_DATA`, `buf` is a `wifi_promiscuous_pkt_t *`:
-
-```c
-typedef struct {
-    wifi_pkt_rx_ctrl_t rx_ctrl;
-    uint8_t payload[0];
-} wifi_promiscuous_pkt_t;
-```
-
-`rx_ctrl.sig_len` describes the captured payload length for normal management/data/control frames. `wifi_pkt_rx_ctrl_t` carries native receive metadata such as RSSI, rate/PHY flags, channel and timestamp; exact fields are target/version dependent, so B should include the ESP-IDF header instead of duplicating the struct.
-
-`WIFI_PKT_MISC` must be treated specially: there is no normal payload to parse.
-
-### Callback context
-
-Espressif documents that `wifi_promiscuous_cb_t` runs directly in the Wi-Fi driver task. It is **not an ISR**, but it must remain short because heavy work blocks the Wi-Fi driver task.
-
-Allowed in callback:
-
-- inspect `type` and `rx_ctrl`;
-- perform fixed-bound checks;
-- copy the frame into a preallocated ring/queue slot;
-- signal a worker.
-
-Do not in callback:
-
-- allocate/free dynamically per packet;
-- log/format every frame;
-- run protocol parsers;
-- touch LVGL;
-- perform SD I/O;
-- block on a mutex held by application code.
-
-### Buffer lifetime contract
-
-Treat `buf`, `wifi_promiscuous_pkt_t`, and `payload` as driver-owned and valid only for the duration of the callback. Agent B may parse synchronously in the callback only if the work is demonstrably tiny; otherwise copy `rx_ctrl`, `type`, payload length and payload bytes before returning.
-
-Never queue the `buf` pointer itself.
-
-### Minimal async handoff shape
-
-Use a Wi-Fi-specific fixed ring, not a generic packet type:
+D's async handoff is Wi-Fi-specific:
 
 ```c
 typedef struct {
     wifi_promiscuous_pkt_type_t type;
     wifi_pkt_rx_ctrl_t rx_ctrl;
+    uint16_t original_len;
     uint16_t captured_len;
-    uint8_t bytes[NEARBY_WIFI_CAPTURE_MAX];
-} nearby_wifi_rx_slot_t;
+    bool truncated;
+    uint8_t payload[NEARBY_WIFI_CAPTURE_MAX];
+} nearby_wifi_rx_record_t;
 ```
 
-If `rx_ctrl.sig_len > NEARBY_WIFI_CAPTURE_MAX`, either drop or mark truncated according to the scanner's requirement. Never silently present a truncated frame as complete.
+Rules:
 
----
+- no per-packet heap allocation;
+- callback does bounded checks/copy only;
+- `WIFI_PKT_MISC` is not presented as a normal frame payload;
+- RX-error frames are dropped;
+- trailing FCS handling follows Espressif's simple-sniffer convention;
+- queue overflow increments the Wi-Fi drop counter;
+- a truncated frame is explicitly marked; it is never silently presented as complete;
+- B parses the copied slot at task level and returns it with `nearby_wifi_rx_release()`.
 
-## 3. ESP-NimBLE GAP discovery
+Never queue the original driver pointer.
 
-### Entry point
+## 3. ESP-NimBLE discovery
 
-Headers from ESP-NimBLE host, normally `host/ble_gap.h`, `host/ble_hs.h`, and `host/ble_hs_adv.h`.
+ESP32-C6 v6.1 builds enable:
 
-Legacy scan examples use:
+```text
+CONFIG_BT_NIMBLE_50_FEATURE_SUPPORT=y
+CONFIG_BT_NIMBLE_EXT_ADV=y
+```
+
+D initializes NimBLE, waits for host sync/address inference, starts GAP discovery, and tears the host/controller down before another D RF phase begins.
+
+### Legacy reports
+
+For `BLE_GAP_EVENT_DISC`, D copies the native `struct ble_gap_disc_desc` by value, copies bounded advertisement data, and repoints `desc.data` into the durable D slot.
+
+The legacy path remains separate:
 
 ```c
-ble_gap_disc(own_addr_type, duration_ms, &disc_params, gap_event_cb, arg);
+typedef struct {
+    struct ble_gap_disc_desc desc;
+    uint16_t original_length_data;
+    bool truncated;
+    uint8_t data[NEARBY_BLE_LEGACY_DATA_MAX];
+} nearby_ble_disc_record_t;
 ```
 
-The registered callback receives:
+### Extended reports
+
+When `MYNEWT_VAL(BLE_EXT_ADV)` is enabled, D uses `ble_gap_ext_disc()` and receives `BLE_GAP_EVENT_EXT_DISC`.
+
+Extended reports use their own bounded queue and native descriptor:
 
 ```c
-int gap_event_cb(struct ble_gap_event *event, void *arg);
+typedef struct {
+    struct ble_gap_ext_disc_desc desc;
+    uint16_t original_length_data;
+    bool truncated;
+    uint8_t data[NEARBY_BLE_EXT_DATA_MAX];
+} nearby_ble_ext_disc_record_t;
 ```
 
-For legacy advertising reports:
+D preserves native extended metadata including address, RSSI, TX power, SID, primary/secondary PHY, periodic interval, properties and `data_status`. `desc.data` is repointed to the durable slot buffer.
 
-```c
-event->type == BLE_GAP_EVENT_DISC
-event->disc   /* struct ble_gap_disc_desc */
+**Boundary:** D does not reassemble chained or incomplete extended-advertising reports. `COMPLETE`, `INCOMPLETE` and `TRUNCATED` controller status remains native input for B. Any semantic reassembly/parsing policy belongs above D.
+
+Legacy and extended records are never collapsed into a generic BLE packet type.
+
+### Callback lifetime
+
+The GAP event, discovery descriptor's original data pointer, and parsed advertisement-field pointers are callback scoped. B must only retain D's copied record until the matching release call.
+
+## 4. IEEE 802.15.4 receive
+
+D follows the public driver lifecycle:
+
+```text
+register callback list while disabled
+ -> esp_ieee802154_enable
+ -> set channel 11..26
+ -> promiscuous=true
+ -> esp_ieee802154_receive
+ -> ISR callback
+ -> stop/sleep/disable
 ```
 
-Agent B should consume the native discovery descriptor. Important members in current NimBLE examples are the peer address, RSSI, advertising data length and advertising data pointer. Parse AD structures with the native helper when useful:
-
-```c
-struct ble_hs_adv_fields fields;
-ble_hs_adv_parse_fields(&fields, event->disc.data, event->disc.length_data);
-```
-
-The parsed `ble_hs_adv_fields` contains pointers into the advertisement data for names/service data/manufacturer data rather than creating durable copies.
-
-Extended advertising is a separate NimBLE GAP event/descriptor path in builds that enable BLE 5 extended advertising. B must branch on the actual event type rather than casting every discovery event to the legacy descriptor.
-
-### Callback context
-
-The GAP callback runs in the NimBLE host task/event context, not a hardware ISR. Keep it short for the same reason as other host callbacks.
-
-### Buffer lifetime contract
-
-Treat the `struct ble_gap_event *`, its discovery descriptor and advertisement data pointer as callback-scoped. If B consumes the advertisement later on another task, copy:
-
-- native address value / address type;
-- RSSI and other scalar descriptor metadata B needs;
-- exactly `length_data` bytes of advertising data.
-
-Do not queue `event`, `event->disc.data`, or pointers stored inside `ble_hs_adv_fields`.
-
-Parsing the AD data synchronously inside the NimBLE host callback is legal if it remains small and nonblocking. Retaining the parsed pointer fields after callback return is not.
-
----
-
-## 4. IEEE 802.15.4 promiscuous receive
-
-### Entry point
-
-Headers: `esp_ieee802154.h`, `esp_ieee802154_types.h`
-
-Typical receive setup uses public APIs:
-
-```c
-esp_ieee802154_enable();
-esp_ieee802154_set_channel(channel);       /* 11..26 */
-esp_ieee802154_set_promiscuous(true);
-esp_ieee802154_receive();
-```
-
-The radio delivers:
-
-```c
-void esp_ieee802154_receive_done(
-    uint8_t *frame,
-    esp_ieee802154_frame_info_t *frame_info);
-```
-
-Espressif explicitly documents IEEE 802.15.4 subsystem events in this section as **ISR context**.
-
-### Native frame contract
-
-The receive buffer begins with the PHY length byte followed by MHR and MAC payload; the driver validates FCS in hardware. The public documentation notes that the FCS bytes are not exposed as a normal FCS and that receive metadata includes RSSI/LQI information.
-
-`esp_ieee802154_frame_info_t` is native metadata. Current public fields include receive RSSI, LQI, SFD timestamp and multipan match index; B should include the ESP-IDF type rather than mirror it.
-
-### Mandatory ownership rule
-
-After the upper layer is finished with the driver-owned `frame`, it **must** call:
+The RX callback is ISR context. D copies the native `esp_ieee802154_frame_info_t` plus the length-prefixed frame into a preallocated slot, then calls:
 
 ```c
 esp_ieee802154_receive_handle_done(frame);
 ```
 
-The safest NearBy One ISR handoff is therefore:
+before leaving the ISR path. The driver-owned pointer never reaches B.
 
-1. read and validate `frame[0]` against the IEEE 802.15.4 maximum;
-2. copy the length byte + frame bytes into a preallocated queue/ring slot;
-3. copy `*frame_info` into that slot;
-4. call `esp_ieee802154_receive_handle_done(frame)` **before returning from the ISR callback**;
-5. wake a worker with `xQueueSendFromISR`/task notification;
-6. B parses only the copied slot in task context.
+Queue-full, malformed-length and other drop paths must still return driver ownership and increment the 802.15.4 drop counter.
 
-This releases the scarce driver RX buffer immediately and avoids forcing the application worker to call a driver ownership API on an old pointer.
+B receives only the copied native-facing record and owns Zigbee/Thread/Matter parsing above this boundary.
 
-Do not:
+## 5. Product scan-session gate
 
-- queue the original `frame` pointer;
-- defer `receive_handle_done(frame)` until after parsing;
-- allocate from heap in the ISR;
-- parse Zigbee/Thread payloads in the ISR;
-- log formatted frame dumps from the ISR.
+ESP32-C6 has one shared 2.4 GHz RF subsystem. A complete discovery run therefore owns one product gate from first module through final cleanup:
 
-If a future zero-copy experiment deliberately retains the driver frame, it must be separately measured for RX-buffer starvation and must preserve the exact `receive_handle_done()` ownership protocol. It is not the default path.
+```text
+IDLE
+ -> scan_session_begin()
+SCANNING
+ -> Wi-Fi phase
+ -> teardown
+ -> NimBLE phase
+ -> teardown
+ -> 802.15.4 phase
+ -> teardown
+ -> nearby_radio_scan_cleanup_all()
+ -> scan_session_end()
+IDLE
+```
 
----
+The gate is not released/reacquired between scanner modules.
 
-## 5. Scan-session / RF ownership contract
+Competing device/RF/Web operations fail immediately while the complete scan owns the gate. Web Management uses the same gate through a competing-operation lease and therefore also excludes a complete scan.
 
-ESP32-C6 Wi-Fi, BLE and IEEE 802.15.4 share one 2.4 GHz RF subsystem. Coexistence support does not remove NearBy One's product-level requirement that a **complete discovery scan session is exclusive**.
+Driver callbacks/ISRs never take this application gate.
 
-The scan coordinator owns the scan gate once at session start and keeps it until all scheduled scanner modules are finished. Individual Wi-Fi/BLE/802.15.4 phases do not release/reacquire the product gate between phases.
+## 6. D-internal RF phase guard
 
-While a scan session is active:
+The product scan gate alone does not prevent the same scan-owner task from accidentally starting two radio stacks simultaneously. D therefore has a small private radio-phase guard with only these states:
 
-- UI-triggered device connect/read/write actions return `ESP_ERR_INVALID_STATE` / busy immediately;
-- ad-hoc RF operations outside the coordinator return busy;
-- Web management/provisioning must not silently start a competing scan;
-- scanner phases may stop/start/reconfigure the radio stacks under the existing session ownership.
+```text
+NONE / WIFI / NIMBLE / I154
+```
 
-The lock protects product-level exclusivity, not every low-level radio callback. Never take this mutex in Wi-Fi callbacks, NimBLE callbacks or the IEEE 802.15.4 ISR.
+It is not exposed as a scanner scheduler and does not cross the D boundary. A phase start fails if another phase is still owned. The next phase becomes legal only after the previous driver has been proven down and its phase released.
 
----
+## 7. Fatal cleanup semantics
 
-## 6. Drop / overload policy
+A failed driver teardown that leaves D unable to prove the RF subsystem is down is **fatal for the current complete scan session**.
 
-The first pass uses bounded preallocated queues/rings. When a producer outruns its worker:
+Rules:
 
-- increment a per-transport drop counter;
-- release any driver-owned buffer immediately as required;
-- do not block a driver callback or ISR waiting for space;
-- expose the drop count in measurement logs so B can distinguish parser misses from capture overload.
+1. the failing Wi-Fi/NimBLE/802.15.4 path latches a scan fatal error when the current task owns the scan;
+2. `scan_session_end()` refuses to release the product gate while fatal is latched;
+3. competing RF/Web/device operations therefore remain excluded;
+4. `nearby_radio_scan_cleanup_all()` retries all three teardown paths, including partial-init states;
+5. only when every teardown succeeds and the private RF phase is `NONE` may D clear the fatal latch;
+6. only then may the owner call `scan_session_end()`.
 
-No cross-transport `packet_t` is introduced. Wi-Fi, NimBLE and 802.15.4 retain separate native-facing handoff records because their metadata, lifetime and callback rules are materially different.
+D never force-releases a mutex owned by another task. A returned cleanup error is not permission to proceed with a different radio stack.
+
+## 8. Drop / overload policy
+
+All hot receive paths use bounded preallocated slots. When a producer outruns its consumer:
+
+- increment the transport-specific drop counter;
+- do not block the Wi-Fi driver task, NimBLE host task or 802.15.4 ISR waiting for space;
+- release driver ownership immediately where required;
+- expose counts to measurement/bench logs.
+
+Current D queues remain independent for Wi-Fi, BLE legacy, BLE extended and IEEE 802.15.4.
+
+## 9. Ownership summary
+
+Agent D owns native driver lifetime, callback lifetime safety, bounded copies, RF exclusion and hardware errors.
+
+Agent B owns Wi-Fi frame parsing, BLE AD/service/manufacturer parsing, Zigbee/Thread/Matter parsing and scanner semantics.
+
+Agent C owns recognition keys/database semantics.
+
+Agent A owns Device/Entity/State semantics.
+
+Agent E owns UI/Web presentation.
+
+No protocol recognition or vendor matching is permitted in this component.
 
 ## Upstream anchors
 
-- Espressif `examples/network/simple_sniffer/main/cmd_sniffer.c` for Wi-Fi promiscuous startup/callback style.
-- Espressif `components/esp_wifi/include/esp_wifi.h` and native Wi-Fi types for callback/structure definitions.
-- Espressif NimBLE central/client examples (`examples/bluetooth/nimble/blecent`, `ble_spp/spp_client`) for `BLE_GAP_EVENT_DISC` and `ble_hs_adv_parse_fields()`.
-- Espressif `components/ieee802154/include/esp_ieee802154.h` for ISR context and `receive_handle_done()` ownership.
-- Espressif `examples/ieee802154/ieee802154_cli` for public radio setup/receive flow.
+- ESP-IDF v6.1 Wi-Fi public APIs and `examples/network/simple_sniffer`.
+- ESP-IDF v6.1 NimBLE central / periodic-sync examples plus the pinned ESP-NimBLE `ble_gap.h` for `ble_gap_ext_disc()` and `ble_gap_ext_disc_desc`.
+- ESP-IDF v6.1 IEEE 802.15.4 public API for callback registration, receive and `receive_handle_done()`.
+- Waveshare board examples only for board-specific wiring/init evidence; generic radio lifecycle stays on Espressif public APIs.
