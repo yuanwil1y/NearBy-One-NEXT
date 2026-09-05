@@ -171,16 +171,16 @@
         <div id="fileSummary" class="status">No file selected.</div>
 
         <div class="warning">
-          <strong>This replaces the SD-card database.</strong>
-          <p>Importing may format or reinitialize the SD card before the new database is written.</p>
+          <strong>Importing the database formats the entire SD card.</strong>
+          <p>All files and data currently on the SD card will be permanently deleted before the new database is written.</p>
         </div>
 
         <label class="confirm">
           <input id="confirmReplace" type="checkbox">
-          <span>I understand that the existing SD-card database may be erased and replaced.</span>
+          <span>I understand that importing will format the entire SD card and permanently delete all of its contents.</span>
         </label>
 
-        <button id="importButton" class="primary" type="button" disabled>Prepare SD &amp; Import</button>
+        <button id="importButton" class="primary" type="button" disabled>Format SD &amp; Import</button>
         <progress id="dbProgress" value="0" max="100" hidden></progress>
         <div id="dbStatus" class="status" role="status">Waiting for a database file.</div>
       </div>
@@ -285,7 +285,7 @@
         status,
         [
           "Validating file header…",
-          "Preparing SD card…",
+          "Formatting the entire SD card…",
           "Streaming database to final storage…",
           "Verifying imported database…"
         ],
