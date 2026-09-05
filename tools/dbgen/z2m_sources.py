@@ -41,7 +41,10 @@ def _definition_objects(text: str) -> Iterator[str]:
     marker = text.find("export const definitions")
     if marker < 0:
         return
-    array_start = text.find("[", marker)
+    assignment = text.find("=", marker)
+    if assignment < 0:
+        return
+    array_start = text.find("[", assignment + 1)
     if array_start < 0:
         return
 
