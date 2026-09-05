@@ -1,4 +1,5 @@
 #include "radio_runtime.h"
+#include "radio_runtime_internal.h"
 
 #include "scan_session.h"
 
@@ -17,12 +18,23 @@ esp_err_t nearby_radio_scan_cleanup_all(void)
 
     esp_err_t first_error = ESP_OK;
 
-    /* All three paths are deliberately idempotent. Calling every teardown
-     * catches partial-init/reset states where a simple "ready" flag is false
-     * even though a driver still owns the shared RF phase. */
+    /*
+     * Always call all three teardown paths. This handles partial-init/reset
+     * states where a public "ready" flag is false but D still owns an RF
+     * phase. A failed teardown is fatal for the current complete scan: the
+     * product gate must remain held until a later retry proves everything is
+     * actually down.
+     */
     remember_first_error(nearby_i154_receive_stop(), &first_error);
     remember_first_error(nearby_nimble_driver_deinit(), &first_error);
     remember_first_error(nearby_wifi_driver_deinit(), &first_error);
 
-    return first_error;
+    if (first_error != ESP_OK || nearby_radio_phase_current() != NEARBY_RADIO_PHASE_NONE) {
+        const esp_err_t fatal = first_error != ESP_OK ? first_error : ESP_FAIL;
+        (void)scan_session_mark_fatal(fatal);
+        return fatal;
+    }
+
+    /* A subsequent successful retry is the only normal way to clear fatal. */
+    return scan_session_recovery_clear_fatal();
 }
