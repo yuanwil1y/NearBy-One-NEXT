@@ -13,9 +13,19 @@ extern "C" {
  * Field names intentionally follow HA Core where practical.
  *
  * No persistence is performed. ha_core_reset() returns the runtime to boot-empty.
- * All returned pointers are read-only borrowed views into fixed pools and must not
- * be cached across a successful mutating call. ha_core_revision() changes when
- * registry/state contents change.
+ *
+ * TASK / THREAD OWNERSHIP CONTRACT:
+ * ha_core is deliberately single-owner-task and is NOT thread-safe. One application
+ * task owns all runtime access: Device/Entity/State mutations, getters/enumeration,
+ * State-listener registration, service invocation, and ha_core_revision() sampling.
+ * Producers running in other tasks must copy already-matched semantic results into
+ * an application-owned queue and let the owner task call ha_core. They must not call
+ * ha_core directly.
+ *
+ * Returned pointers are read-only borrowed views into fixed pools and must not be
+ * cached across a successful mutating call. ha_core_revision() is only an owner-task
+ * invalidation counter. It is not atomic, a lock, a memory barrier, a seqlock, or any
+ * other cross-task synchronization primitive.
  */
 
 #ifndef HA_MAX_DEVICES
@@ -151,6 +161,7 @@ typedef struct {
 typedef void (*ha_state_listener_t)(const ha_state_t *state, void *ctx);
 
 void ha_core_reset(void);
+/* Owner-task-only invalidation counter; never use it for cross-task synchronization. */
 uint32_t ha_core_revision(void);
 ha_core_footprint_t ha_core_footprint(void);
 

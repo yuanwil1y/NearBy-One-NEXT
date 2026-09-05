@@ -18,9 +18,54 @@ already matched + already parsed semantic data
 
 The component intentionally uses fixed-size C pools, no heap ownership, no persistence, no Python runtime, no SQLite, and no NearBy-specific Capability/Action/ViewModel layer.
 
+## Task / thread ownership contract
+
+`ha_core` is deliberately **single-owner-task and not thread-safe**. This is part of the frozen public contract, not a temporary implementation detail.
+
+One application-selected owner task must perform all runtime access that touches Device / Entity / State pools or callbacks:
+
+- `ha_device_*`, `ha_entity_*`, and `ha_state_*` mutation and lookup/enumeration;
+- Agent E Device/Entity/State enumeration and State reads;
+- `ha_state_set_listener()` registration;
+- `ha_entity_supports_service()` / `ha_entity_call_service()`;
+- `ha_core_reset()` and `ha_core_revision()` sampling.
+
+If Agent B/C processing happens in other FreeRTOS tasks, those tasks **must not call `ha_core` directly**. They copy their already-matched, already-parsed semantic result into an application-owned queue. The owner task dequeues that value and makes the normal direct calls:
+
+```text
+B/C worker task(s)
+  semantic Device/Entity/State value
+              |
+              | copy through existing app/FreeRTOS queue
+              v
+        single ha_core owner task
+          |               |
+          | mutate        | enumerate/read for Agent E
+          v               v
+      Device/Entity/State runtime
+```
+
+The queue is outside `ha_core`; this component does not add a queue manager, dispatcher, mutex, semaphore, critical section, atomic wrapper, or task framework.
+
+### `ha_core_revision()` is not synchronization
+
+`ha_core_revision()` is only an invalidation counter for code already running on the owner task. It may be sampled to decide whether a previously resolved borrowed view should be re-resolved after owner-task code performed a successful mutation.
+
+It is **not atomic**, not a lock, not a memory barrier, not a seqlock, and not permission for another task to read the pools concurrently. A pattern such as "worker mutates while UI reads, then UI retries if revision changed" is explicitly unsupported.
+
+Pointers returned by getters/enumerators are borrowed read-only views into fixed pools. Copy durable keys such as `device.id` or `entity.entity_id` when needed, and re-resolve after any successful owner-task mutation.
+
+### Callback ownership
+
+The State listener registered with `ha_state_set_listener()` is invoked synchronously from State publication on the owner task. It should use the supplied State only as a borrowed view and normally mark/invalidate UI work rather than handing the pointer to another task.
+
+Entity service handlers are also invoked synchronously by `ha_entity_call_service()` on the owner task. If the actual protocol control path belongs to another task, the service handler should enqueue a command to that task and return; any resulting semantic State update comes back through the normal queue to the owner task.
+
+The detailed frozen contract and integration examples are in `docs/research/ha-core-task-ownership.md`.
+
 ## Production semantic API
 
-Upstream B/C glue should normally use the direct API instead of introducing another matched-result framework:
+Upstream B/C glue should use the direct API instead of introducing another matched-result framework:
 
 1. Resolve an existing Device with `ha_device_get_by_identifier()` / `ha_device_get_by_connection()`, or create/update it with `ha_device_upsert()`.
 2. Create/update Entities with `ha_entity_upsert()`. Entity identity is `domain + platform + unique_id`; `entity_id` must be a valid HA-style `<domain>.<slug>` for one of the supported domains.
@@ -34,16 +79,14 @@ No production API accepts packet bytes, scanner records, product fingerprints or
 
 ## Stable API for Agent E
 
-Agent E should consume A directly:
+Agent E consumes A directly, on the same owner task:
 
 - Nearby list: `ha_device_count()` + `ha_device_at()`.
 - Selected Device: `ha_entity_count_for_device(device_id)` + `ha_entity_at_for_device(device_id, index)`.
 - State: `ha_state_get(entity_id)`.
 - State refresh: `ha_state_set_listener()` for State publish/update notification.
-- Structural invalidation: `ha_core_revision()` changes after every successful Device/Entity/State mutation and reset.
+- Owner-task invalidation detection: `ha_core_revision()`.
 - Interaction: `ha_entity_supports_service()` + `ha_entity_call_service()`.
-
-Pointers returned by getters/enumerators are **borrowed read-only views into fixed pools**. Do not cache them across a successful mutating API call. For an enumeration pass that may race with semantic updates, E can sample `ha_core_revision()` before and after the pass and retry if it changed. The core itself does not add a UI ViewModel or a locking framework.
 
 `ha_core_reset()` clears Device/Entity/State data but preserves the registered State listener, so a UI subscription can survive repeated scan/session resets. Pass `NULL` to `ha_state_set_listener()` to unsubscribe.
 
@@ -86,19 +129,11 @@ On the x86_64 host ABI used for the hardening test:
 
 The host test asserts the default stays below 32 KiB. ESP32-C6 uses smaller pointers than the x86_64 host, so the target value is expected to be no larger, but the ESP-IDF map file remains authoritative when Agent D provides the complete firmware RAM budget.
 
-The pre-hardening layout used 24 Devices, 96 Entities, 96 States, 8 attributes and substantially larger fixed strings, putting the raw pools near 195 KiB on the same 64-bit host ABI. The current layout removes server/config-only fields and reduces default capacities instead of changing HA Device/Entity/State semantics.
-
 ## Generic semantic fixtures are test-only
 
-Protocol/vendor-neutral fixtures live under `tests/` and are not linked by the ESP-IDF component. `tests/ha_core_semantic_path.c` intentionally proves the boundary with direct semantic calls such as:
+Protocol/vendor-neutral fixtures live under `tests/` and are not linked by the ESP-IDF component. `tests/ha_core_semantic_path.c` proves the already-matched semantic boundary with direct calls only.
 
-```text
-Device(name/manufacturer/model + identifier)
-  -> sensor.temperature = 23.4 °C
-  -> switch.power = off + turn_on callback
-```
-
-There is no Xiaomi/SwitchBot/Shelly/vendor parser or recognition code in this component.
+There is no vendor parser or recognition code in this component.
 
 ## Host tests
 
@@ -113,7 +148,9 @@ This runs:
 - normal lifecycle smoke coverage;
 - `sizeof()` / pool footprint reporting and the default <32 KiB regression guard;
 - generic already-matched semantic input -> Device/Entity/State coverage;
-- a deliberately tiny-capacity build that exercises exhaustion and edge cases.
+- tiny-capacity exhaustion and edge-case coverage;
+- a deliberately single-threaded owner-task harness proving queued-value -> mutation -> UI enumeration and revision invalidation behavior;
+- a source guard that fails if lock/atomic synchronization primitives are added to production `ha_core.c/.h`.
 
 ESP-IDF links only `components/ha_core/ha_core.c` through `components/ha_core/CMakeLists.txt`.
 
@@ -134,3 +171,7 @@ Primary references:
 - `homeassistant/components/button/`
 
 This is a clean C MCU implementation of the audited names/behavior. It does not copy Python source bodies.
+
+## Freeze status
+
+After the task/thread ownership contract and its host regression test land, `agent-a/home-assistant-audit` is a **frozen baseline**. No further feature development is intended on this branch unless the project explicitly reopens Agent A for a correctness defect or a required HA-semantic compatibility change. The branch is not merged by Agent A.
