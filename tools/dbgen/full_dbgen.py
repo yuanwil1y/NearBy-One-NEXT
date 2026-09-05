@@ -6,11 +6,16 @@ and never imports or executes Home Assistant, ZHA, or Zigbee2MQTT runtime code.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import ha_lan_sources
 import nearby_dbgen
 import z2m_sources
+
+
+COLLISION_WINNER_REASON = (
+    "deterministic canonical-JSON lexical tiebreak; no semantic merge; manual review required"
+)
 
 
 def _source_manifest(ha_rev: str, zha_rev: str, z2m_rev: str) -> list[dict[str, Any]]:
@@ -45,6 +50,44 @@ def _source_manifest(ha_rev: str, zha_rev: str, z2m_rev: str) -> list[dict[str, 
     ]
 
 
+def dedupe_with_ledger(
+    records: Iterable[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Dedupe keys deterministically while retaining complete differing claims.
+
+    Identical duplicate records are collapsed silently. Differing records for the
+    same normalized key produce a provenance ledger entry. The current winner rule
+    intentionally does not pretend to resolve semantics: canonical JSON order is a
+    deterministic runtime tiebreak and every such collision remains manual-review.
+    """
+    grouped: dict[str, dict[bytes, dict[str, Any]]] = {}
+    for rec in records:
+        key = rec["key"]
+        grouped.setdefault(key, {})[nearby_dbgen.canonical_json(rec)] = rec
+
+    winners: list[dict[str, Any]] = []
+    ledger: list[dict[str, Any]] = []
+    for key in sorted(grouped):
+        candidates = [
+            rec for _canonical, rec in sorted(grouped[key].items(), key=lambda item: item[0])
+        ]
+        winner = candidates[0]
+        winners.append(winner)
+        if len(candidates) > 1:
+            ledger.append(
+                {
+                    "key": key,
+                    "sources": sorted({str(rec.get("source_id", "unknown")) for rec in candidates}),
+                    "candidate_count": len(candidates),
+                    "candidates": candidates,
+                    "winner": winner,
+                    "winner_reason": COLLISION_WINNER_REASON,
+                    "manual_review": True,
+                }
+            )
+    return winners, ledger
+
+
 def build_database(
     *,
     ha_bluetooth: Path,
@@ -76,7 +119,7 @@ def build_database(
         raw_counts[name] = len(records)
         raw_records.extend(records)
 
-    records, conflicts = nearby_dbgen.dedupe(raw_records)
+    records, conflict_ledger = dedupe_with_ledger(raw_records)
     payload = nearby_dbgen.build_flat_payload(records)
     sources = _source_manifest(ha_rev, zha_rev, z2m_rev)
 
@@ -94,15 +137,16 @@ def build_database(
         "record_count": len(records),
         "raw_record_count": len(raw_records),
         "record_counts": dict(sorted(counts.items())),
-        "conflict_count": len(conflicts),
-        "conflict_keys_sample": conflicts[:50],
+        "conflict_count": len(conflict_ledger),
+        "conflict_keys_sample": [entry["key"] for entry in conflict_ledger[:50]],
+        "conflict_ledger": conflict_ledger,
         "sources": sources,
         "extraction": {
             "raw_records_by_extractor": dict(sorted(raw_counts.items())),
             "z2m": z2m_stats,
         },
         "payload": {"encoding": "sorted-flat-records-v1", "key_order": "utf8-byte-lexicographic"},
-        "generator": {"name": "full_dbgen.py", "version": 1},
+        "generator": {"name": "full_dbgen.py", "version": 2},
     }
     manifest_bytes = nearby_dbgen.canonical_json(manifest)
     file_size = nearby_dbgen.HEADER_SIZE + len(manifest_bytes) + len(payload)
@@ -121,7 +165,7 @@ def build_database(
         "records": len(records),
         "raw_records": len(raw_records),
         "counts": dict(sorted(counts.items())),
-        "conflicts": len(conflicts),
-        "conflict_keys_sample": conflicts[:50],
+        "conflicts": len(conflict_ledger),
+        "conflict_ledger": conflict_ledger,
         "extraction": manifest["extraction"],
     }

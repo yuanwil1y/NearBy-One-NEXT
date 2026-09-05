@@ -80,6 +80,25 @@ class FullDbgenTest(unittest.TestCase):
             self.assertIsNotNone(nearby_dbgen.lookup(out, "zigbee:model:ZB-2"))
             self.assertIsNotNone(nearby_dbgen.lookup(out, "zigbee:fingerprint:Other\x1fZB-2"))
 
+    def test_collision_ledger_preserves_claims_winner_reason_and_review_state(self):
+        records = [
+            {"key": "zigbee:model:X", "record_type": "demo", "source_id": "z2m_converters", "claim": "B"},
+            {"key": "zigbee:model:X", "record_type": "demo", "source_id": "zha_quirks", "claim": "A"},
+            {"key": "zigbee:model:Y", "record_type": "demo", "source_id": "ha_core", "claim": "same"},
+            {"key": "zigbee:model:Y", "record_type": "demo", "source_id": "ha_core", "claim": "same"},
+        ]
+        winners, ledger = full_dbgen.dedupe_with_ledger(records)
+        self.assertEqual(len(winners), 2)
+        self.assertEqual(len(ledger), 1)
+        collision = ledger[0]
+        self.assertEqual(collision["key"], "zigbee:model:X")
+        self.assertEqual(collision["candidate_count"], 2)
+        self.assertEqual(collision["sources"], ["z2m_converters", "zha_quirks"])
+        self.assertEqual(len(collision["candidates"]), 2)
+        self.assertEqual(collision["winner"], next(r for r in winners if r["key"] == "zigbee:model:X"))
+        self.assertIn("canonical-JSON", collision["winner_reason"])
+        self.assertTrue(collision["manual_review"])
+
 
 def _keys(path: Path):
     with path.open("rb") as f:

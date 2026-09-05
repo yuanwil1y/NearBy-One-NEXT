@@ -106,7 +106,7 @@ def main() -> None:
     sources = manifest.get("sources", [])
     blocked = sum(1 for src in sources if src.get("redistribution") != "allowed")
     report = {
-        "report_schema": 2,
+        "report_schema": 3,
         "scope": "full pinned HA generated Bluetooth/Zeroconf/SSDP/DHCP + full pinned ZHA + static pinned Z2M identity extraction",
         "pins": pins,
         "generator": manifest.get("generator"),
@@ -118,7 +118,7 @@ def main() -> None:
             "raw_record_count": build_summary["raw_records"],
             "normalized_unique_key_count": record_total,
             "conflict_count": manifest.get("conflict_count", 0),
-            "conflict_keys_sample": manifest.get("conflict_keys_sample", []),
+            "conflict_ledger": manifest.get("conflict_ledger", []),
             "parser_required_count": parser_required_count,
             "blocked_nonredistributable_source_count": blocked,
         },
