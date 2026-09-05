@@ -535,7 +535,7 @@
   ],
   "scope": "full pinned HA generated Bluetooth/Zeroconf/SSDP/DHCP + full pinned ZHA + static pinned Z2M identity extraction + pinned redistributable Bluetooth assigned numbers + pinned MIT Zigbee manufacturer/profile identifiers",
   "timing_ms": {
-    "build": 2653.753,
-    "release_validation": 6.295
+    "build": 2587.337,
+    "release_validation": 5.597
   }
 }
