@@ -1,0 +1,28 @@
+{
+  "records": 50000,
+  "lookups_per_round": 3000,
+  "sqlite": {
+    "bytes": 8126464,
+    "median_lookup_us": 4.89,
+    "configured_cache_kib": 64,
+    "page_size": 4096
+  },
+  "sharded_messagepack": {
+    "bytes": 7706217,
+    "median_lookup_us": 57.48,
+    "shards": 256,
+    "max_shard_bytes": 36191,
+    "access": "read+decode whole selected shard"
+  },
+  "flat_sorted": {
+    "bytes": 8330481,
+    "median_lookup_us": 22.23,
+    "index_entry_bytes": 16,
+    "access": "binary-search fixed index; seek/read candidate key/value"
+  },
+  "notes": [
+    "Host Python timing only; use for relative comparison, not ESP32-C6 absolute latency.",
+    "MessagePack represents the sharded CBOR/MessagePack design class. The benchmark script can be extended with cbor2 when available.",
+    "SQLite cache is deliberately capped to 64 KiB here; library/runtime footprint is not included in file bytes."
+  ]
+}
