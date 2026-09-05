@@ -31,5 +31,14 @@
       "v1/service_uuids.json"
     ],
     "license_spdx": "BSD-3-Clause"
+  },
+  "zigbee_herdsman_defs": {
+    "repository": "Koenkk/zigbee-herdsman",
+    "revision": "467b2842776b84f2deb8a095a500d64a12acf5ed",
+    "source_paths": [
+      "src/zspec/zcl/definition/manufacturerCode.ts",
+      "src/zspec/consts.ts"
+    ],
+    "license_spdx": "MIT"
   }
 }

@@ -1,7 +1,7 @@
 """Build the combined NearBy recognition container from mechanical extractors.
 
 This module is PC-side tooling only. It consumes already-fetched/pinned source files
-and never imports or executes Home Assistant, ZHA, or Zigbee2MQTT runtime code.
+and never imports or executes Home Assistant, ZHA, Zigbee2MQTT, or herdsman runtime code.
 """
 from __future__ import annotations
 
@@ -12,12 +12,19 @@ import bt_numbers_sources
 import ha_lan_sources
 import nearby_dbgen
 import z2m_sources
+import zigbee_numbers_sources
 
 AMBIGUOUS_INDEX_FLAG = 0x0001
 CANDIDATE_ORDER_REASON = "canonical-JSON lexical order for reproducibility only; not recognition precedence"
 
 
-def _source_manifest(ha_rev: str, zha_rev: str, z2m_rev: str, bt_rev: str | None) -> list[dict[str, Any]]:
+def _source_manifest(
+    ha_rev: str,
+    zha_rev: str,
+    z2m_rev: str,
+    bt_rev: str | None,
+    zigbee_defs_rev: str | None,
+) -> list[dict[str, Any]]:
     sources = [
         {
             "source_id": "ha_core",
@@ -61,6 +68,20 @@ def _source_manifest(ha_rev: str, zha_rev: str, z2m_rev: str, bt_rev: str | None
                 "transform": "extract_bt_numbers_json_company_and_service",
             }
         )
+    if zigbee_defs_rev is not None:
+        sources.append(
+            {
+                "source_id": "zigbee_herdsman_defs",
+                "name": "Koenkk/zigbee-herdsman static Zigbee definitions",
+                "upstream_revision": zigbee_defs_rev,
+                "upstream_url": "https://github.com/Koenkk/zigbee-herdsman",
+                "license_spdx": "MIT",
+                "license_url": "https://github.com/Koenkk/zigbee-herdsman/blob/master/LICENSE",
+                "redistribution": "allowed",
+                "classification": "DATA_ONLY",
+                "transform": "extract_zigbee_manufacturer_codes_and_public_profile_ids",
+            }
+        )
     return sources
 
 
@@ -80,12 +101,7 @@ def _ambiguity_record(key: str, candidates: list[dict[str, Any]]) -> dict[str, A
 def dedupe_with_ledger(
     records: Iterable[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Deduplicate exact claims and fail closed for unresolved key collisions.
-
-    Canonical JSON ordering is used only to make candidate ordering reproducible.
-    It MUST NOT select a semantic winner. A collided key becomes one ambiguity
-    envelope at runtime and retains all distinct candidate claims/provenance.
-    """
+    """Deduplicate exact claims and fail closed for unresolved key collisions."""
     grouped: dict[str, dict[bytes, dict[str, Any]]] = {}
     for rec in records:
         key = rec["key"]
@@ -160,11 +176,18 @@ def build_database(
     bt_company_ids: Path | None = None,
     bt_service_uuids: Path | None = None,
     bt_rev: str | None = None,
+    zigbee_manufacturer_codes: Path | None = None,
+    zigbee_consts: Path | None = None,
+    zigbee_defs_rev: str | None = None,
 ) -> dict[str, Any]:
     if (bt_company_ids is None) != (bt_service_uuids is None):
         raise ValueError("Bluetooth assigned-number company/service inputs must be supplied together")
     if bt_company_ids is not None and bt_rev is None:
         raise ValueError("Bluetooth assigned-number revision is required when inputs are supplied")
+    if (zigbee_manufacturer_codes is None) != (zigbee_consts is None):
+        raise ValueError("Zigbee manufacturer/profile definition inputs must be supplied together")
+    if zigbee_manufacturer_codes is not None and zigbee_defs_rev is None:
+        raise ValueError("Zigbee definition revision is required when inputs are supplied")
 
     by_extractor: dict[str, list[dict[str, Any]]] = {
         "ha_bluetooth": nearby_dbgen.extract_ha_bluetooth(ha_bluetooth, ha_rev),
@@ -181,6 +204,11 @@ def build_database(
             bt_numbers_sources.extract_company_ids(bt_company_ids, bt_rev)
             + bt_numbers_sources.extract_service_uuids(bt_service_uuids, bt_rev)
         )
+    if zigbee_manufacturer_codes is not None and zigbee_consts is not None and zigbee_defs_rev is not None:
+        by_extractor["zigbee_assigned_numbers"] = (
+            zigbee_numbers_sources.extract_manufacturer_codes(zigbee_manufacturer_codes, zigbee_defs_rev)
+            + zigbee_numbers_sources.extract_profile_ids(zigbee_consts, zigbee_defs_rev)
+        )
 
     raw_records: list[dict[str, Any]] = []
     raw_counts: dict[str, int] = {}
@@ -194,7 +222,13 @@ def build_database(
 
     records, conflict_ledger = dedupe_with_ledger(raw_records)
     payload = build_flat_payload(records)
-    sources = _source_manifest(ha_rev, zha_rev, z2m_rev, bt_rev if bt_company_ids is not None else None)
+    sources = _source_manifest(
+        ha_rev,
+        zha_rev,
+        z2m_rev,
+        bt_rev if bt_company_ids is not None else None,
+        zigbee_defs_rev if zigbee_manufacturer_codes is not None else None,
+    )
 
     counts: dict[str, int] = {}
     for rec in records:
@@ -230,7 +264,7 @@ def build_database(
             "key_order": "utf8-byte-lexicographic",
             "index_flags": {"0x0001": "ambiguous; value ref valid; not a confirmed match"},
         },
-        "generator": {"name": "full_dbgen.py", "version": 5},
+        "generator": {"name": "full_dbgen.py", "version": 6},
     }
     manifest_bytes = nearby_dbgen.canonical_json(manifest)
     file_size = nearby_dbgen.HEADER_SIZE + len(manifest_bytes) + len(payload)

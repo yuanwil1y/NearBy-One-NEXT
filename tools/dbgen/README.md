@@ -1,6 +1,6 @@
 # NearBy recognition DB generators
 
-Agent C tooling is PC-side and deliberately static: it converts pinned upstream recognition knowledge into a read-only `.nbdb` container. It never imports Home Assistant/ZHA runtimes, never executes Zigbee2MQTT TypeScript/JavaScript, and never parses radio/network packets.
+Agent C tooling is PC-side and deliberately static: it converts pinned upstream recognition knowledge into a read-only `.nbdb` container. It never imports Home Assistant/ZHA runtimes, never executes Zigbee2MQTT/zigbee-herdsman TypeScript/JavaScript, and never parses radio/network packets.
 
 ## Reproducible pinned proof
 
@@ -10,7 +10,8 @@ Agent C tooling is PC-side and deliberately static: it converts pinned upstream 
 - Home Assistant generated HomeKit model matchers plus Zeroconf, SSDP and DHCP matchers;
 - ZHA literal manufacturer/model + simple `QuirkBuilder`/`applies_to` identifiers;
 - Zigbee2MQTT literal `zigbeeModel`, literal manufacturer/model fingerprints and common `tuya.fingerprint(...)` literal arguments;
-- Nordic Semiconductor `bluetooth-numbers-database` company IDs and service UUIDs from a pinned BSD-3-Clause revision.
+- Nordic Semiconductor `bluetooth-numbers-database` company IDs and service UUIDs from a pinned BSD-3-Clause revision;
+- Koenkk `zigbee-herdsman` static manufacturer codes plus HA/Smart Energy/Green Power/Touchlink profile IDs from a pinned MIT revision.
 
 Run the same build locally from already-fetched pinned trees/files:
 
@@ -25,6 +26,8 @@ python tools/dbgen/build_pinned.py \
   --z2m-root ../zigbee-herdsman-converters/src/devices \
   --bt-company-ids ../bluetooth-numbers-database/v1/company_ids.json \
   --bt-service-uuids ../bluetooth-numbers-database/v1/service_uuids.json \
+  --zigbee-manufacturer-codes ../zigbee-herdsman/src/zspec/zcl/definition/manufacturerCode.ts \
+  --zigbee-consts ../zigbee-herdsman/src/zspec/consts.ts \
   --out build/nearby.nbdb \
   --report build/coverage.json
 
@@ -37,9 +40,11 @@ The repository proof artifacts are `artifacts/pinned/nearby.nbdb` and `docs/db/c
 
 Different claims for one normalized key are never silently treated as resolved. Canonical JSON ordering is only a reproducibility mechanism. An unresolved collision is stored as `recognition_ambiguity` with every distinct candidate and its provenance; the flat index carries ambiguity flag `0x0001`. The C reader returns `NEARBY_DB_AMBIGUOUS`, not `NEARBY_DB_OK`, while preserving a value reference so candidates can be inspected. There is no lexical product winner. Identical duplicate records collapse without creating a conflict. See `docs/db/conflict-semantics.md`.
 
-## Focused PoC and OUI input
+## Focused PoC and gated sources
 
 `nearby_dbgen.py build` remains useful for focused HA Bluetooth/ZHA/OUI experiments. OUI input is an IEEE-style CSV supplied at build time; direct IEEE bulk OUI output remains `review-required` until redistribution terms are explicitly cleared, so `validate --release` rejects an OUI-inclusive PoC by default. Prefer a separately audited permissive mirror/source before adding OUI data to the release pinned proof.
+
+Matter VID/PID follows the same rule: public DCL visibility is not by itself treated as redistribution permission. Candidate mirrors/integration catalogs must have independently verified distribution terms and provenance before they enter the release proof.
 
 ## Bounded lookup
 

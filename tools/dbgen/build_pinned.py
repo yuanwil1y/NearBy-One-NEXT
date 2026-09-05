@@ -45,6 +45,8 @@ def main() -> None:
     p.add_argument("--z2m-root", required=True)
     p.add_argument("--bt-company-ids", required=True)
     p.add_argument("--bt-service-uuids", required=True)
+    p.add_argument("--zigbee-manufacturer-codes", required=True)
+    p.add_argument("--zigbee-consts", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--report", required=True)
     args = p.parse_args()
@@ -54,6 +56,7 @@ def main() -> None:
     zha_rev = pins["zha_device_handlers"]["revision"]
     z2m_rev = pins["zigbee_herdsman_converters"]["revision"]
     bt_rev = pins["bluetooth_numbers_nordic"]["revision"]
+    zigbee_defs_rev = pins["zigbee_herdsman_defs"]["revision"]
     build_epoch = int(pins["build_epoch"])
     out = Path(args.out)
 
@@ -71,6 +74,9 @@ def main() -> None:
         bt_company_ids=Path(args.bt_company_ids),
         bt_service_uuids=Path(args.bt_service_uuids),
         bt_rev=bt_rev,
+        zigbee_manufacturer_codes=Path(args.zigbee_manufacturer_codes),
+        zigbee_consts=Path(args.zigbee_consts),
+        zigbee_defs_rev=zigbee_defs_rev,
         out=out,
         db_version=2,
         build_epoch=build_epoch,
@@ -127,10 +133,11 @@ def main() -> None:
     sources = manifest.get("sources", [])
     blocked = sum(1 for src in sources if src.get("redistribution") != "allowed")
     report = {
-        "report_schema": 4,
+        "report_schema": 5,
         "scope": (
             "full pinned HA generated Bluetooth/Zeroconf/SSDP/DHCP + full pinned ZHA + "
-            "static pinned Z2M identity extraction + pinned redistributable Bluetooth assigned numbers"
+            "static pinned Z2M identity extraction + pinned redistributable Bluetooth assigned numbers + "
+            "pinned MIT Zigbee manufacturer/profile identifiers"
         ),
         "pins": pins,
         "generator": manifest.get("generator"),
@@ -165,6 +172,8 @@ def main() -> None:
             "--ha-dhcp <HA>/homeassistant/generated/dhcp.py "
             "--zha-root <ZHA>/zhaquirks --z2m-root <Z2M>/src/devices "
             "--bt-company-ids <BT>/v1/company_ids.json --bt-service-uuids <BT>/v1/service_uuids.json "
+            "--zigbee-manufacturer-codes <ZH>/src/zspec/zcl/definition/manufacturerCode.ts "
+            "--zigbee-consts <ZH>/src/zspec/consts.ts "
             "--out artifacts/pinned/nearby.nbdb --report docs/db/coverage-pinned.json"
         ),
     }
