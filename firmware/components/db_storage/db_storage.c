@@ -10,6 +10,7 @@
 #include "scan_session.h"
 
 static FILE *s_part_file;
+static bool s_preflight_safe_to_format;
 static bool s_prepared;
 static size_t s_expected_bytes;
 static size_t s_written_bytes;
@@ -31,16 +32,41 @@ static esp_err_t ensure_db_directories(void)
     return ESP_OK;
 }
 
+esp_err_t nearby_db_storage_set_preflight_safe_to_format(bool safe_to_format)
+{
+    if (require_storage_lease() != ESP_OK) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (s_part_file != NULL || s_prepared) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    /* RAM-only one-shot authorization. D intentionally stores no C semantics. */
+    s_preflight_safe_to_format = safe_to_format;
+    return ESP_OK;
+}
+
+bool nearby_db_storage_preflight_is_authorized(void)
+{
+    return s_preflight_safe_to_format;
+}
+
 esp_err_t nearby_db_storage_prepare_whole_sd(bool confirmed)
 {
     if (require_storage_lease() != ESP_OK) {
         return ESP_ERR_INVALID_STATE;
     }
-    if (!confirmed || s_part_file != NULL) {
+    if (!confirmed || !s_preflight_safe_to_format || s_part_file != NULL || s_prepared) {
         return ESP_ERR_INVALID_STATE;
     }
 
+    /*
+     * Consume authorization before destructive I/O. Any failure requires a
+     * fresh C preflight plus fresh explicit user confirmation before retry.
+     */
+    s_preflight_safe_to_format = false;
     s_prepared = false;
+
     esp_err_t err = nearby_board_sd_format_whole(true);
     if (err != ESP_OK) {
         return err;
@@ -93,7 +119,8 @@ esp_err_t nearby_db_upload_write(const uint8_t *data, size_t len)
     if (len == 0) {
         return ESP_OK;
     }
-    if (s_expected_bytes != 0 && len > s_expected_bytes - s_written_bytes) {
+    if (s_expected_bytes != 0 &&
+        (s_written_bytes > s_expected_bytes || len > s_expected_bytes - s_written_bytes)) {
         return ESP_ERR_INVALID_SIZE;
     }
 
@@ -156,6 +183,7 @@ esp_err_t nearby_db_upload_finish(void)
     s_prepared = false;
     memset(&s_hooks, 0, sizeof(s_hooks));
     s_expected_bytes = 0;
+    s_written_bytes = 0;
     return ESP_OK;
 }
 
