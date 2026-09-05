@@ -3,12 +3,13 @@
   "coverage": {
     "by_protocol": {
       "ble": 238,
-      "lan": 640,
+      "lan": 711,
       "zigbee": 7739
     },
     "by_record_type": {
       "ha_bluetooth_matcher": 238,
       "ha_dhcp_matcher": 386,
+      "ha_homekit_model_matcher": 71,
       "ha_ssdp_matcher": 91,
       "ha_zeroconf_matcher": 163,
       "z2m_fingerprint": 2378,
@@ -16,14 +17,14 @@
       "zha_manufacturer_model": 678
     },
     "by_source": {
-      "ha_core": 878,
+      "ha_core": 949,
       "z2m_converters": 7061,
       "zha_quirks": 678
     }
   },
   "db": {
     "blocked_nonredistributable_source_count": 0,
-    "bytes": 3443250,
+    "bytes": 3464607,
     "conflict_count": 8,
     "conflict_ledger": [
       {
@@ -472,17 +473,18 @@
         "winner_reason": "deterministic canonical-JSON lexical tiebreak; no semantic merge; manual review required"
       }
     ],
-    "normalized_unique_key_count": 8617,
+    "normalized_unique_key_count": 8688,
     "parser_required_count": 678,
     "path": "artifacts/pinned/nearby.nbdb",
-    "raw_record_count": 8626,
-    "record_count": 8617,
-    "sha256": "faae4e6e136dac60810bfb8fcc9e518ae21a0f263d4969da8a1d533e77cccd40"
+    "raw_record_count": 8697,
+    "record_count": 8688,
+    "sha256": "bd2b6f51afa44f67a1d5edd3ef1e6f5f697256a125c6b619262bfdf9459a65fb"
   },
   "extraction": {
     "raw_records_by_extractor": {
       "ha_bluetooth": 238,
       "ha_dhcp": 386,
+      "ha_homekit": 71,
       "ha_ssdp": 91,
       "ha_zeroconf": 163,
       "z2m": 7069,
@@ -500,7 +502,7 @@
   },
   "generator": {
     "name": "full_dbgen.py",
-    "version": 2
+    "version": 3
   },
   "pins": {
     "build_epoch": 1788634001,
@@ -546,6 +548,11 @@
     },
     {
       "hit": true,
+      "key": "lan:homekit:model:3810X\u001froku",
+      "record_type": "ha_homekit_model_matcher"
+    },
+    {
+      "hit": true,
       "key": "lan:ssdp:any:*\u001fupnp\u001f2a10086bc877cbaa",
       "record_type": "ha_ssdp_matcher"
     },
@@ -572,7 +579,7 @@
   ],
   "scope": "full pinned HA generated Bluetooth/Zeroconf/SSDP/DHCP + full pinned ZHA + static pinned Z2M identity extraction",
   "timing_ms": {
-    "build": 2604.633,
-    "release_validation": 4.635
+    "build": 2518.827,
+    "release_validation": 4.065
   }
 }
