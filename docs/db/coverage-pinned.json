@@ -1,0 +1,68 @@
+{
+  "build_command": "python tools/dbgen/build_pinned.py --pins tools/dbgen/pins.json --ha-bluetooth <HA>/homeassistant/generated/bluetooth.py --zha-root <ZHA>/zhaquirks --out artifacts/pinned/nearby.nbdb --report docs/db/coverage-pinned.json",
+  "coverage": {
+    "by_protocol": {
+      "ble": 238,
+      "zigbee": 678
+    },
+    "by_record_type": {
+      "ha_bluetooth_matcher": 238,
+      "zha_manufacturer_model": 678
+    },
+    "by_source": {
+      "ha_core": 238,
+      "zha_quirks": 678
+    }
+  },
+  "db": {
+    "blocked_nonredistributable_source_count": 0,
+    "bytes": 289787,
+    "conflict_count": 1,
+    "normalized_unique_key_count": 916,
+    "parser_required_count": 678,
+    "path": "artifacts/pinned/nearby.nbdb",
+    "record_count": 916,
+    "sha256": "dbcfac1b2d48778704b2aed3f01c5378e6c5ccfc27c7cf0d8d12e9398ab52f7f"
+  },
+  "generator": {
+    "name": "nearby_dbgen.py",
+    "version": 1
+  },
+  "pins": {
+    "build_epoch": 1788634001,
+    "home_assistant_core": {
+      "license_spdx": "Apache-2.0",
+      "repository": "home-assistant/core",
+      "revision": "2a1c7d1a864ed7cf9f6fb16c8a0ece7d01e16d48",
+      "source_path": "homeassistant/generated/bluetooth.py"
+    },
+    "zha_device_handlers": {
+      "license_spdx": "Apache-2.0",
+      "repository": "zigpy/zha-device-handlers",
+      "revision": "6a3822c1348f9e40ad243eb881084a1c075da277",
+      "source_path": "zhaquirks"
+    }
+  },
+  "release_validation": {
+    "errors": [],
+    "ok": true
+  },
+  "report_schema": 1,
+  "representative_lookups": [
+    {
+      "hit": true,
+      "key": "ble:10032|00008251-0000-1000-8000-00805f9b34fb|||govee_ble|63",
+      "record_type": "ha_bluetooth_matcher"
+    },
+    {
+      "hit": true,
+      "key": "zigbee:\u0002KE\u001fTRADFRI open/close remote",
+      "record_type": "zha_manufacturer_model"
+    }
+  ],
+  "scope": "full pinned HA generated Bluetooth + full pinned ZHA zhaquirks tree",
+  "timing_ms": {
+    "build": 532.137,
+    "release_validation": 0.463
+  }
+}
