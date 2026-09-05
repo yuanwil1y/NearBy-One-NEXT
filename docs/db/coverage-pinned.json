@@ -579,7 +579,7 @@
   ],
   "scope": "full pinned HA generated Bluetooth/Zeroconf/SSDP/DHCP + full pinned ZHA + static pinned Z2M identity extraction",
   "timing_ms": {
-    "build": 2518.827,
-    "release_validation": 4.065
+    "build": 2728.506,
+    "release_validation": 4.111
   }
 }
