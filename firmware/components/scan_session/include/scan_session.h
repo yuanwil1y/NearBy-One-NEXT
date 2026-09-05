@@ -12,10 +12,24 @@ extern "C" {
 
 esp_err_t scan_session_init(void);
 esp_err_t scan_session_begin(TickType_t timeout_ticks);
+/**
+ * End the complete scan session.
+ *
+ * Refuses to release the product gate while a fatal cleanup error is latched.
+ * D's radio recovery path must first prove all active radio drivers are down
+ * and clear the fatal latch.
+ */
 esp_err_t scan_session_end(void);
 bool scan_session_is_active(void);
 esp_err_t scan_session_require_scan_owner(void);
 uint32_t scan_session_generation(void);
+
+/** Latch the first fatal cleanup error for the current scan owner. */
+esp_err_t scan_session_mark_fatal(esp_err_t reason);
+/** Return ESP_OK when no fatal cleanup error is latched, otherwise the reason. */
+esp_err_t scan_session_fatal_error(void);
+/** Clear the fatal latch only after D has proved cleanup/recovery succeeded. */
+esp_err_t scan_session_recovery_clear_fatal(void);
 
 esp_err_t scan_session_competing_op_try_begin(void);
 /** True while a competing operation lease owns the product gate. */
@@ -30,7 +44,10 @@ esp_err_t scan_session_require_competing_active(void);
 esp_err_t scan_session_require_competing_owner(void);
 esp_err_t scan_session_competing_op_end(void);
 
-/** Error-path helper that only releases a lease owned by the current task. */
+/**
+ * Error-path helper that only releases a lease owned by the current task.
+ * A scan lease with a fatal cleanup latch is deliberately not released.
+ */
 esp_err_t scan_session_cleanup_owned(void);
 
 #ifdef __cplusplus
