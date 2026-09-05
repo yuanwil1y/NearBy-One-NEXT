@@ -10,9 +10,10 @@ Status legend: **COPY** = mechanically transform/copy into generated DB with not
 | 4 | HA integration requirement tables (Xiaomi BLE, SwitchBot, Shelly, etc.) | Vendor-specific product IDs and decoder selection | manufacturer/service data, model IDs, product IDs | DATA+PARSER or CODE_ONLY | Per dependency | Audit per dependency before import; static tables can become DB records, decoder logic remains compiled. |
 | 5 | Nordic Semiconductor bluetooth-numbers-database | Redistributable mirror of Bluetooth assigned-number metadata | company ID, service UUID | DATA_ONLY | BSD-3-Clause repository license | **COPY** pinned `company_ids.json` + `service_uuids.json`; preserve source revision/notice. |
 | 5 | Koenkk zigbee-herdsman static definitions | Redistributable Zigbee manufacturer-code mirror plus core public profile constants | manufacturer code, HA/SE/GP/Touchlink profile ID | DATA_ONLY | MIT | **COPY** pinned `ManufacturerCode` enum and explicit public profile constants only; do not import adapter/ZCL runtime. |
+| 5 | SmartThings Edge Drivers Matter fingerprints | Known manufacturer-specific Matter devices used by SmartThings matching | VID + PID, device label/profile | DATA_ONLY | Apache-2.0 | **COPY** pinned `matterManufacturer` literal fields. Mark as integration fingerprint catalog, not CSA authoritative assignment registry. |
 | 5 | Bluetooth SIG official Assigned Numbers | Authoritative assigned numbers | company ID, assigned UUID, appearance | DATA_ONLY | Bluetooth SIG publication terms | **BUILD-READ** / reference unless direct bulk redistribution is explicitly cleared. Do not conflate with the Nordic mirror license. |
-| 5 | IEEE OUI registry | MAC prefix -> organization enrichment and DHCP/LAN hints | 24/28/36-bit OUI assignments | DATA_ONLY | IEEE registry terms, not treated here as a permissive OSS license | **BUILD-READ**. Focused PoC accepts official CSV and marks output `review-required`; do not vendor bulk output yet. |
-| 5 | Matter vendor/product identifiers | VID/PID naming | VID/PID | DATA_ONLY | CSA/DCL or source-specific terms | **BUILD-READ** until a release-safe source is selected. Apache-licensed Matter SDK constants may be copied only for identifiers actually contained in that work; public DCL read access alone is not treated as a redistribution grant. |
+| 5 | IEEE OUI public listings | MAC prefix -> organization enrichment and DHCP/LAN hints | 24/28/36-bit assignments | DATA_ONLY | IEEE states the public listing is not copyright-restricted; Debian `ieee-data` records the listing as Public Domain | Candidate **COPY** only after pinning an integrity-stable package/version + license evidence in the release pipeline; direct ad-hoc live downloads remain gated. |
+| 5 | CSA/DCL authoritative Matter vendor/product identifiers | Authoritative VID/PID assignment/certification metadata | VID/PID | DATA_ONLY | CSA/DCL terms | **BUILD-READ** until the bulk dataset's redistribution terms are independently established. Public read access alone is insufficient. |
 | 6 | ESPHome Devices | Product aliases, board/chipset and catalog enrichment | manufacturer/model/aliases | DATA_ONLY enrichment | Repository GPL-3.0-or-later | **REFERENCE** by default; bulk redistribution requires explicit project policy. |
 | 6 | Theengs Decoder | Excellent BLE product/decoder coverage | manufacturer/service payload fingerprints | DATA+PARSER | GPL-family | **REFERENCE** by default; useful as a test oracle and coverage map. |
 
@@ -37,6 +38,9 @@ The real pinned proof covers:
 2. ZHA literal manufacturer/model and simple declarative applies-to identifiers;
 3. Zigbee2MQTT static `zigbeeModel`, literal fingerprints and common literal `tuya.fingerprint(...)` arguments;
 4. Nordic BSD-3-Clause Bluetooth company IDs and service UUIDs;
-5. MIT zigbee-herdsman manufacturer codes plus HA/Smart Energy/Green Power/Touchlink profile IDs.
+5. MIT zigbee-herdsman manufacturer codes plus HA/Smart Energy/Green Power/Touchlink profile IDs;
+6. Apache-2.0 SmartThings Matter manufacturer VID/PID fingerprints, explicitly labeled non-authoritative catalog data.
 
-IEEE OUI remains a focused gated PoC input until redistribution is cleared or a separately audited permissive source is adopted. Matter VID/PID must follow the same source-by-source rule rather than assuming public visibility implies redistribution permission.
+For OUI, Debian's `ieee-data` copyright metadata provides useful redistribution evidence: it records IEEE's OUI public listing as Public Domain and says IEEE does not restrict distribution. The release pipeline should still pin a concrete package/version and preserve this evidence before changing the existing direct-IEEE PoC from `review-required` to an allowed source.
+
+CSA DCL remains gated until an independently verified bulk redistribution contract is established; the SmartThings catalog fills useful VID/PID recognition coverage without pretending to replace the authoritative registry.

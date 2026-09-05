@@ -1,7 +1,8 @@
 """Build the combined NearBy recognition container from mechanical extractors.
 
 This module is PC-side tooling only. It consumes already-fetched/pinned source files
-and never imports or executes Home Assistant, ZHA, Zigbee2MQTT, or herdsman runtime code.
+and never imports or executes Home Assistant, ZHA, Zigbee2MQTT, herdsman, or
+SmartThings runtime code.
 """
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ from typing import Any, Iterable
 
 import bt_numbers_sources
 import ha_lan_sources
+import matter_sources
 import nearby_dbgen
 import z2m_sources
 import zigbee_numbers_sources
@@ -24,6 +26,7 @@ def _source_manifest(
     z2m_rev: str,
     bt_rev: str | None,
     zigbee_defs_rev: str | None,
+    matter_rev: str | None,
 ) -> list[dict[str, Any]]:
     sources = [
         {
@@ -80,6 +83,21 @@ def _source_manifest(
                 "redistribution": "allowed",
                 "classification": "DATA_ONLY",
                 "transform": "extract_zigbee_manufacturer_codes_and_public_profile_ids",
+            }
+        )
+    if matter_rev is not None:
+        sources.append(
+            {
+                "source_id": "smartthings_matter_fingerprints",
+                "name": "SmartThings Edge Drivers Matter manufacturer fingerprints",
+                "upstream_revision": matter_rev,
+                "upstream_url": "https://github.com/SmartThingsCommunity/SmartThingsEdgeDrivers",
+                "license_spdx": "Apache-2.0",
+                "license_url": "https://github.com/SmartThingsCommunity/SmartThingsEdgeDrivers/blob/main/LICENSE",
+                "redistribution": "allowed",
+                "classification": "DATA_ONLY",
+                "transform": "extract_matter_manufacturer_vid_pid_fingerprints",
+                "catalog_semantics": "integration_fingerprint_not_authoritative_assignment_registry",
             }
         )
     return sources
@@ -179,6 +197,8 @@ def build_database(
     zigbee_manufacturer_codes: Path | None = None,
     zigbee_consts: Path | None = None,
     zigbee_defs_rev: str | None = None,
+    matter_root: Path | None = None,
+    matter_rev: str | None = None,
 ) -> dict[str, Any]:
     if (bt_company_ids is None) != (bt_service_uuids is None):
         raise ValueError("Bluetooth assigned-number company/service inputs must be supplied together")
@@ -188,6 +208,8 @@ def build_database(
         raise ValueError("Zigbee manufacturer/profile definition inputs must be supplied together")
     if zigbee_manufacturer_codes is not None and zigbee_defs_rev is None:
         raise ValueError("Zigbee definition revision is required when inputs are supplied")
+    if matter_root is not None and matter_rev is None:
+        raise ValueError("Matter fingerprint revision is required when inputs are supplied")
 
     by_extractor: dict[str, list[dict[str, Any]]] = {
         "ha_bluetooth": nearby_dbgen.extract_ha_bluetooth(ha_bluetooth, ha_rev),
@@ -209,6 +231,10 @@ def build_database(
             zigbee_numbers_sources.extract_manufacturer_codes(zigbee_manufacturer_codes, zigbee_defs_rev)
             + zigbee_numbers_sources.extract_profile_ids(zigbee_consts, zigbee_defs_rev)
         )
+    matter_stats: dict[str, int] = {}
+    if matter_root is not None and matter_rev is not None:
+        matter_records, matter_stats = matter_sources.extract_tree(matter_root, matter_rev)
+        by_extractor["smartthings_matter_fingerprints"] = matter_records
 
     raw_records: list[dict[str, Any]] = []
     raw_counts: dict[str, int] = {}
@@ -228,6 +254,7 @@ def build_database(
         z2m_rev,
         bt_rev if bt_company_ids is not None else None,
         zigbee_defs_rev if zigbee_manufacturer_codes is not None else None,
+        matter_rev if matter_root is not None else None,
     )
 
     counts: dict[str, int] = {}
@@ -258,13 +285,14 @@ def build_database(
         "extraction": {
             "raw_records_by_extractor": dict(sorted(raw_counts.items())),
             "z2m": z2m_stats,
+            "matter": matter_stats,
         },
         "payload": {
             "encoding": "sorted-flat-records-v1",
             "key_order": "utf8-byte-lexicographic",
             "index_flags": {"0x0001": "ambiguous; value ref valid; not a confirmed match"},
         },
-        "generator": {"name": "full_dbgen.py", "version": 6},
+        "generator": {"name": "full_dbgen.py", "version": 7},
     }
     manifest_bytes = nearby_dbgen.canonical_json(manifest)
     file_size = nearby_dbgen.HEADER_SIZE + len(manifest_bytes) + len(payload)

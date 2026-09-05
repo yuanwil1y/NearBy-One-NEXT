@@ -40,5 +40,20 @@
       "src/zspec/consts.ts"
     ],
     "license_spdx": "MIT"
+  },
+  "smartthings_matter_fingerprints": {
+    "repository": "SmartThingsCommunity/SmartThingsEdgeDrivers",
+    "revision": "f46b6470978a6736ce634e01d054835a919d9284",
+    "source_paths": [
+      "drivers/SmartThings/matter-appliance/fingerprints.yml",
+      "drivers/SmartThings/matter-lock/fingerprints.yml",
+      "drivers/SmartThings/matter-rvc/fingerprints.yml",
+      "drivers/SmartThings/matter-sensor/fingerprints.yml",
+      "drivers/SmartThings/matter-switch/fingerprints.yml",
+      "drivers/SmartThings/matter-thermostat/fingerprints.yml",
+      "drivers/SmartThings/matter-window-covering/fingerprints.yml"
+    ],
+    "license_spdx": "Apache-2.0",
+    "catalog_semantics": "integration_fingerprint_not_authoritative_assignment_registry"
   }
 }

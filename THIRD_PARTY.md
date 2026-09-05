@@ -34,14 +34,17 @@ A generated database MUST retain the source IDs used by each record and MUST emi
 | `z2m_converters` | Koenkk/zigbee-herdsman-converters | MIT | DATA+PARSER | allowed |
 | `bluetooth_numbers_nordic` | Nordic Semiconductor bluetooth-numbers-database mirror | BSD-3-Clause terms in repository `LICENSE`; mirror tracks Bluetooth assigned-number metadata | DATA_ONLY | allowed with notice |
 | `zigbee_herdsman_defs` | Koenkk/zigbee-herdsman static `ManufacturerCode` + public profile constants | MIT | DATA_ONLY | allowed with notice |
-| `ieee_oui` | IEEE public OUI registry | LicenseRef-IEEE-OUI-Terms | DATA_ONLY | review-required |
+| `smartthings_matter_fingerprints` | SmartThingsCommunity/SmartThingsEdgeDrivers `matterManufacturer` fingerprints | Apache-2.0 | DATA_ONLY | allowed with notice |
+| `ieee_oui` | IEEE public OUI registry/direct download | public-listing terms tracked separately; direct source remains gated until provenance text is pinned into the release pipeline | DATA_ONLY | review-required |
 | `bluetooth_sig_assigned` | Bluetooth SIG official Assigned Numbers publication | LicenseRef-Bluetooth-SIG-Terms | DATA_ONLY | review-required as a direct bulk source |
-| `matter_ids` | Matter / CSA assigned vendor-product metadata | LicenseRef-CSA-Terms | DATA_ONLY | review-required until a release-safe source is selected |
+| `matter_ids` | CSA/DCL authoritative Matter assignment data | LicenseRef-CSA-Terms | DATA_ONLY | review-required until a release-safe bulk source is selected |
 | `esphome_devices` | ESPHome Devices catalog | GPL-3.0-or-later repository content; dataset redistribution requires project policy | DATA_ONLY enrichment | reference-only by default |
 | `theengs_decoder` | Theengs Decoder | GPL-3.0-family project | DATA+PARSER | reference-only by default |
 
 The Nordic mirror is intentionally tracked separately from the official Bluetooth SIG source: the generated artifact cites the redistributable mirror revision and license rather than treating publication on the SIG website as an automatic redistribution grant.
 
-The `zigbee_herdsman_defs` source is also tracked separately from CSA normative publications. NearBy copies only the literal identifiers present in the pinned MIT-licensed work; it does not claim that this mirror is the authoritative or exhaustive CSA registry.
+The `zigbee_herdsman_defs` source is tracked separately from CSA normative publications. NearBy copies only the literal identifiers present in the pinned MIT-licensed work; it does not claim that this mirror is the authoritative or exhaustive CSA registry.
+
+The SmartThings Matter source is an integration fingerprint catalog contributed under Apache-2.0, not the authoritative CSA VID/PID assignment registry. Records therefore carry `catalog_semantics=integration_fingerprint_not_authoritative_assignment_registry`; identical VID/PID collisions remain subject to the same fail-closed ambiguity policy as every other recognition source.
 
 This is an engineering inventory, not legal advice. Any `review-required` source must be cleared before its bulk data is shipped in a NearBy release image.

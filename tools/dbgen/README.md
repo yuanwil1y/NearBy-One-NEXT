@@ -1,6 +1,6 @@
 # NearBy recognition DB generators
 
-Agent C tooling is PC-side and deliberately static: it converts pinned upstream recognition knowledge into a read-only `.nbdb` container. It never imports Home Assistant/ZHA runtimes, never executes Zigbee2MQTT/zigbee-herdsman TypeScript/JavaScript, and never parses radio/network packets.
+Agent C tooling is PC-side and deliberately static: it converts pinned upstream recognition knowledge into a read-only `.nbdb` container. It never imports Home Assistant/ZHA runtimes, never executes Zigbee2MQTT/zigbee-herdsman/SmartThings code, and never parses radio/network packets.
 
 ## Reproducible pinned proof
 
@@ -11,7 +11,10 @@ Agent C tooling is PC-side and deliberately static: it converts pinned upstream 
 - ZHA literal manufacturer/model + simple `QuirkBuilder`/`applies_to` identifiers;
 - Zigbee2MQTT literal `zigbeeModel`, literal manufacturer/model fingerprints and common `tuya.fingerprint(...)` literal arguments;
 - Nordic Semiconductor `bluetooth-numbers-database` company IDs and service UUIDs from a pinned BSD-3-Clause revision;
-- Koenkk `zigbee-herdsman` static manufacturer codes plus HA/Smart Energy/Green Power/Touchlink profile IDs from a pinned MIT revision.
+- Koenkk `zigbee-herdsman` static manufacturer codes plus HA/Smart Energy/Green Power/Touchlink profile IDs from a pinned MIT revision;
+- SmartThings Edge Drivers literal `matterManufacturer` VID/PID fingerprints from a pinned Apache-2.0 revision.
+
+The Matter source is an integration fingerprint catalog, not the authoritative CSA assignment registry. Records retain that distinction in `catalog_semantics`.
 
 Run the same build locally from already-fetched pinned trees/files:
 
@@ -28,6 +31,7 @@ python tools/dbgen/build_pinned.py \
   --bt-service-uuids ../bluetooth-numbers-database/v1/service_uuids.json \
   --zigbee-manufacturer-codes ../zigbee-herdsman/src/zspec/zcl/definition/manufacturerCode.ts \
   --zigbee-consts ../zigbee-herdsman/src/zspec/consts.ts \
+  --matter-root ../SmartThingsEdgeDrivers \
   --out build/nearby.nbdb \
   --report build/coverage.json
 
@@ -42,9 +46,9 @@ Different claims for one normalized key are never silently treated as resolved. 
 
 ## Focused PoC and gated sources
 
-`nearby_dbgen.py build` remains useful for focused HA Bluetooth/ZHA/OUI experiments. OUI input is an IEEE-style CSV supplied at build time; direct IEEE bulk OUI output remains `review-required` until redistribution terms are explicitly cleared, so `validate --release` rejects an OUI-inclusive PoC by default. Prefer a separately audited permissive mirror/source before adding OUI data to the release pinned proof.
+`nearby_dbgen.py build` remains useful for focused HA Bluetooth/ZHA/OUI experiments. Direct live IEEE CSV input remains a gated PoC source. Debian `ieee-data` documents the IEEE public listings as Public Domain and records that IEEE does not restrict distribution; before promoting OUI into the release proof, Agent C must pin a concrete Debian package/version (or equivalent integrity-stable source) and preserve that license/provenance evidence in the manifest/docs.
 
-Matter VID/PID follows the same rule: public DCL visibility is not by itself treated as redistribution permission. Candidate mirrors/integration catalogs must have independently verified distribution terms and provenance before they enter the release proof.
+CSA DCL bulk Matter data follows the same rule: public read access is not by itself treated as redistribution permission. The pinned SmartThings catalog supplies useful redistributable VID/PID recognition without being labeled authoritative CSA assignment data.
 
 ## Bounded lookup
 

@@ -33,6 +33,7 @@ jobs:
           echo "z2m=$(python -c 'import json; print(json.load(open("tools/dbgen/pins.json"))["zigbee_herdsman_converters"]["revision"])')" >> "$GITHUB_OUTPUT"
           echo "bt=$(python -c 'import json; print(json.load(open("tools/dbgen/pins.json"))["bluetooth_numbers_nordic"]["revision"])')" >> "$GITHUB_OUTPUT"
           echo "zh=$(python -c 'import json; print(json.load(open("tools/dbgen/pins.json"))["zigbee_herdsman_defs"]["revision"])')" >> "$GITHUB_OUTPUT"
+          echo "matter=$(python -c 'import json; print(json.load(open("tools/dbgen/pins.json"))["smartthings_matter_fingerprints"]["revision"])')" >> "$GITHUB_OUTPUT"
 
       - name: Fetch pinned Home Assistant generated discovery files
         shell: bash
@@ -81,6 +82,18 @@ jobs:
             "https://raw.githubusercontent.com/Koenkk/zigbee-herdsman/${{ steps.pins.outputs.zh }}/src/zspec/consts.ts" \
             --output /tmp/nearby-zh/src/zspec/consts.ts
 
+      - name: Fetch pinned Apache SmartThings Matter fingerprints
+        shell: bash
+        run: |
+          mkdir -p /tmp/nearby-matter
+          python -c 'import json; print("\n".join(json.load(open("tools/dbgen/pins.json"))["smartthings_matter_fingerprints"]["source_paths"]))' | \
+          while IFS= read -r path; do
+            mkdir -p "/tmp/nearby-matter/$(dirname "$path")"
+            curl --fail --location --silent --show-error \
+              "https://raw.githubusercontent.com/SmartThingsCommunity/SmartThingsEdgeDrivers/${{ steps.pins.outputs.matter }}/${path}" \
+              --output "/tmp/nearby-matter/${path}"
+          done
+
       - name: Run host corruption and generator tests
         run: python -m unittest discover -s tools/dbgen -p 'test_*.py' -v
 
@@ -99,6 +112,7 @@ jobs:
             --bt-service-uuids /tmp/nearby-bt/v1/service_uuids.json \
             --zigbee-manufacturer-codes /tmp/nearby-zh/src/zspec/zcl/definition/manufacturerCode.ts \
             --zigbee-consts /tmp/nearby-zh/src/zspec/consts.ts \
+            --matter-root /tmp/nearby-matter \
             --out artifacts/pinned/nearby.nbdb \
             --report docs/db/coverage-pinned.json
           python tools/dbgen/preflight.py artifacts/pinned/nearby.nbdb --release

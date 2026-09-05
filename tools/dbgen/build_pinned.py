@@ -47,6 +47,7 @@ def main() -> None:
     p.add_argument("--bt-service-uuids", required=True)
     p.add_argument("--zigbee-manufacturer-codes", required=True)
     p.add_argument("--zigbee-consts", required=True)
+    p.add_argument("--matter-root", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--report", required=True)
     args = p.parse_args()
@@ -57,6 +58,7 @@ def main() -> None:
     z2m_rev = pins["zigbee_herdsman_converters"]["revision"]
     bt_rev = pins["bluetooth_numbers_nordic"]["revision"]
     zigbee_defs_rev = pins["zigbee_herdsman_defs"]["revision"]
+    matter_rev = pins["smartthings_matter_fingerprints"]["revision"]
     build_epoch = int(pins["build_epoch"])
     out = Path(args.out)
 
@@ -77,6 +79,8 @@ def main() -> None:
         zigbee_manufacturer_codes=Path(args.zigbee_manufacturer_codes),
         zigbee_consts=Path(args.zigbee_consts),
         zigbee_defs_rev=zigbee_defs_rev,
+        matter_root=Path(args.matter_root),
+        matter_rev=matter_rev,
         out=out,
         db_version=2,
         build_epoch=build_epoch,
@@ -133,11 +137,11 @@ def main() -> None:
     sources = manifest.get("sources", [])
     blocked = sum(1 for src in sources if src.get("redistribution") != "allowed")
     report = {
-        "report_schema": 5,
+        "report_schema": 6,
         "scope": (
             "full pinned HA generated Bluetooth/Zeroconf/SSDP/DHCP + full pinned ZHA + "
             "static pinned Z2M identity extraction + pinned redistributable Bluetooth assigned numbers + "
-            "pinned MIT Zigbee manufacturer/profile identifiers"
+            "pinned MIT Zigbee manufacturer/profile identifiers + pinned Apache-2.0 SmartThings Matter VID/PID fingerprints"
         ),
         "pins": pins,
         "generator": manifest.get("generator"),
@@ -173,7 +177,7 @@ def main() -> None:
             "--zha-root <ZHA>/zhaquirks --z2m-root <Z2M>/src/devices "
             "--bt-company-ids <BT>/v1/company_ids.json --bt-service-uuids <BT>/v1/service_uuids.json "
             "--zigbee-manufacturer-codes <ZH>/src/zspec/zcl/definition/manufacturerCode.ts "
-            "--zigbee-consts <ZH>/src/zspec/consts.ts "
+            "--zigbee-consts <ZH>/src/zspec/consts.ts --matter-root <ST>/drivers "
             "--out artifacts/pinned/nearby.nbdb --report docs/db/coverage-pinned.json"
         ),
     }
