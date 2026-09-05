@@ -1,9 +1,10 @@
 {
-  "build_command": "python tools/dbgen/build_pinned.py --pins tools/dbgen/pins.json --ha-bluetooth <HA>/homeassistant/generated/bluetooth.py --ha-zeroconf <HA>/homeassistant/generated/zeroconf.py --ha-ssdp <HA>/homeassistant/generated/ssdp.py --ha-dhcp <HA>/homeassistant/generated/dhcp.py --zha-root <ZHA>/zhaquirks --z2m-root <Z2M>/src/devices --bt-company-ids <BT>/v1/company_ids.json --bt-service-uuids <BT>/v1/service_uuids.json --zigbee-manufacturer-codes <ZH>/src/zspec/zcl/definition/manufacturerCode.ts --zigbee-consts <ZH>/src/zspec/consts.ts --out artifacts/pinned/nearby.nbdb --report docs/db/coverage-pinned.json",
+  "build_command": "python tools/dbgen/build_pinned.py --pins tools/dbgen/pins.json --ha-bluetooth <HA>/homeassistant/generated/bluetooth.py --ha-zeroconf <HA>/homeassistant/generated/zeroconf.py --ha-ssdp <HA>/homeassistant/generated/ssdp.py --ha-dhcp <HA>/homeassistant/generated/dhcp.py --zha-root <ZHA>/zhaquirks --z2m-root <Z2M>/src/devices --bt-company-ids <BT>/v1/company_ids.json --bt-service-uuids <BT>/v1/service_uuids.json --zigbee-manufacturer-codes <ZH>/src/zspec/zcl/definition/manufacturerCode.ts --zigbee-consts <ZH>/src/zspec/consts.ts --matter-root <ST>/drivers --out artifacts/pinned/nearby.nbdb --report docs/db/coverage-pinned.json",
   "coverage": {
     "by_protocol_runtime_keys": {
       "ble": 4389,
       "lan": 711,
+      "matter": 998,
       "zigbee": 8466
     },
     "by_record_type_runtime_keys": {
@@ -14,6 +15,7 @@
       "ha_homekit_model_matcher": 71,
       "ha_ssdp_matcher": 91,
       "ha_zeroconf_matcher": 163,
+      "matter_vid_pid_fingerprint": 998,
       "recognition_ambiguity": 8,
       "z2m_fingerprint": 2372,
       "z2m_zigbee_model": 4682,
@@ -24,6 +26,7 @@
     "by_source_raw_claims": {
       "bluetooth_numbers_nordic": 4151,
       "ha_core": 949,
+      "smartthings_matter_fingerprints": 998,
       "z2m_converters": 7069,
       "zha_quirks": 679,
       "zigbee_herdsman_defs": 727
@@ -33,7 +36,7 @@
     "ambiguity_index_flag_count": 8,
     "ambiguous_key_count": 8,
     "blocked_nonredistributable_source_count": 0,
-    "bytes": 4797809,
+    "bytes": 5320643,
     "conflict_count": 8,
     "conflict_ledger": [
       {
@@ -384,14 +387,19 @@
         ]
       }
     ],
-    "normalized_unique_key_count": 13566,
+    "normalized_unique_key_count": 14564,
     "parser_required_claim_count": 679,
     "path": "artifacts/pinned/nearby.nbdb",
-    "raw_record_count": 13575,
-    "record_count": 13566,
-    "sha256": "96c8ed365f533697bf65ea1242bee4b6d4788f8c75d45e42350126baa2cb64ce"
+    "raw_record_count": 14573,
+    "record_count": 14564,
+    "sha256": "79ae3634740abc4abb095ae578b7b2c80dee0d607d5bb2c1b1dc44524baf5fb1"
   },
   "extraction": {
+    "matter": {
+      "fingerprint_files_scanned": 7,
+      "fingerprint_files_with_matter_manufacturer": 7,
+      "matter_vid_pid_records": 998
+    },
     "raw_records_by_extractor": {
       "bluetooth_assigned_numbers": 4151,
       "ha_bluetooth": 238,
@@ -399,6 +407,7 @@
       "ha_homekit": 71,
       "ha_ssdp": 91,
       "ha_zeroconf": 163,
+      "smartthings_matter_fingerprints": 998,
       "z2m": 7069,
       "zha": 679,
       "zigbee_assigned_numbers": 727
@@ -415,7 +424,7 @@
   },
   "generator": {
     "name": "full_dbgen.py",
-    "version": 6
+    "version": 7
   },
   "pins": {
     "bluetooth_numbers_nordic": {
@@ -437,6 +446,21 @@
         "homeassistant/generated/zeroconf.py",
         "homeassistant/generated/ssdp.py",
         "homeassistant/generated/dhcp.py"
+      ]
+    },
+    "smartthings_matter_fingerprints": {
+      "catalog_semantics": "integration_fingerprint_not_authoritative_assignment_registry",
+      "license_spdx": "Apache-2.0",
+      "repository": "SmartThingsCommunity/SmartThingsEdgeDrivers",
+      "revision": "f46b6470978a6736ce634e01d054835a919d9284",
+      "source_paths": [
+        "drivers/SmartThings/matter-appliance/fingerprints.yml",
+        "drivers/SmartThings/matter-lock/fingerprints.yml",
+        "drivers/SmartThings/matter-rvc/fingerprints.yml",
+        "drivers/SmartThings/matter-sensor/fingerprints.yml",
+        "drivers/SmartThings/matter-switch/fingerprints.yml",
+        "drivers/SmartThings/matter-thermostat/fingerprints.yml",
+        "drivers/SmartThings/matter-window-covering/fingerprints.yml"
       ]
     },
     "zha_device_handlers": {
@@ -465,7 +489,7 @@
     "errors": [],
     "ok": true
   },
-  "report_schema": 5,
+  "report_schema": 6,
   "representative_lookups": [
     {
       "key": "ble:assigned:company:0000",
@@ -503,6 +527,11 @@
       "status": "matched"
     },
     {
+      "key": "matter:vidpid:100b:0002",
+      "record_type": "matter_vid_pid_fingerprint",
+      "status": "matched"
+    },
+    {
       "key": "zigbee:_TZE200_wfxuhoea\u001fTS0601",
       "record_type": "recognition_ambiguity",
       "status": "ambiguous"
@@ -533,9 +562,9 @@
       "status": "matched"
     }
   ],
-  "scope": "full pinned HA generated Bluetooth/Zeroconf/SSDP/DHCP + full pinned ZHA + static pinned Z2M identity extraction + pinned redistributable Bluetooth assigned numbers + pinned MIT Zigbee manufacturer/profile identifiers",
+  "scope": "full pinned HA generated Bluetooth/Zeroconf/SSDP/DHCP + full pinned ZHA + static pinned Z2M identity extraction + pinned redistributable Bluetooth assigned numbers + pinned MIT Zigbee manufacturer/profile identifiers + pinned Apache-2.0 SmartThings Matter VID/PID fingerprints",
   "timing_ms": {
-    "build": 2587.337,
-    "release_validation": 5.597
+    "build": 1857.773,
+    "release_validation": 5.047
   }
 }
