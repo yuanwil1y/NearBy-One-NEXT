@@ -8,6 +8,9 @@ on:
       - .github/workflows/agent-c-pinned-build.yml
       - tools/dbgen/*.py
       - tools/dbgen/pins.json
+      - components/recognition_db/**
+      - docs/db/**
+      - THIRD_PARTY.md
 
 permissions:
   contents: write
@@ -28,6 +31,7 @@ jobs:
           echo "ha=$(python -c 'import json; print(json.load(open("tools/dbgen/pins.json"))["home_assistant_core"]["revision"])')" >> "$GITHUB_OUTPUT"
           echo "zha=$(python -c 'import json; print(json.load(open("tools/dbgen/pins.json"))["zha_device_handlers"]["revision"])')" >> "$GITHUB_OUTPUT"
           echo "z2m=$(python -c 'import json; print(json.load(open("tools/dbgen/pins.json"))["zigbee_herdsman_converters"]["revision"])')" >> "$GITHUB_OUTPUT"
+          echo "bt=$(python -c 'import json; print(json.load(open("tools/dbgen/pins.json"))["bluetooth_numbers_nordic"]["revision"])')" >> "$GITHUB_OUTPUT"
 
       - name: Fetch pinned Home Assistant generated discovery files
         shell: bash
@@ -55,6 +59,16 @@ jobs:
           git -C /tmp/nearby-z2m -c protocol.version=2 fetch --depth=1 --filter=blob:none origin "${{ steps.pins.outputs.z2m }}"
           git -C /tmp/nearby-z2m checkout --detach FETCH_HEAD
 
+      - name: Fetch pinned redistributable Bluetooth assigned numbers
+        shell: bash
+        run: |
+          mkdir -p /tmp/nearby-bt/v1
+          for name in company_ids service_uuids; do
+            curl --fail --location --silent --show-error \
+              "https://raw.githubusercontent.com/nordicsemi/bluetooth-numbers-database/${{ steps.pins.outputs.bt }}/v1/${name}.json" \
+              --output "/tmp/nearby-bt/v1/${name}.json"
+          done
+
       - name: Run host corruption and generator tests
         run: python -m unittest discover -s tools/dbgen -p 'test_*.py' -v
 
@@ -69,6 +83,8 @@ jobs:
             --ha-dhcp /tmp/nearby-ha/homeassistant/generated/dhcp.py \
             --zha-root /tmp/nearby-zha/zhaquirks \
             --z2m-root /tmp/nearby-z2m/src/devices \
+            --bt-company-ids /tmp/nearby-bt/v1/company_ids.json \
+            --bt-service-uuids /tmp/nearby-bt/v1/service_uuids.json \
             --out artifacts/pinned/nearby.nbdb \
             --report docs/db/coverage-pinned.json
           python tools/dbgen/preflight.py artifacts/pinned/nearby.nbdb --release

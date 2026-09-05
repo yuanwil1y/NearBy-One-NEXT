@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Iterable
 
+import bt_numbers_sources
 import ha_lan_sources
 import nearby_dbgen
 import z2m_sources
@@ -16,8 +17,8 @@ AMBIGUOUS_INDEX_FLAG = 0x0001
 CANDIDATE_ORDER_REASON = "canonical-JSON lexical order for reproducibility only; not recognition precedence"
 
 
-def _source_manifest(ha_rev: str, zha_rev: str, z2m_rev: str) -> list[dict[str, Any]]:
-    return [
+def _source_manifest(ha_rev: str, zha_rev: str, z2m_rev: str, bt_rev: str | None) -> list[dict[str, Any]]:
+    sources = [
         {
             "source_id": "ha_core",
             "name": "Home Assistant Core",
@@ -46,6 +47,21 @@ def _source_manifest(ha_rev: str, zha_rev: str, z2m_rev: str) -> list[dict[str, 
             "transform": "extract_z2m_static_typescript_identity",
         },
     ]
+    if bt_rev is not None:
+        sources.append(
+            {
+                "source_id": "bluetooth_numbers_nordic",
+                "name": "Nordic Semiconductor bluetooth-numbers-database",
+                "upstream_revision": bt_rev,
+                "upstream_url": "https://github.com/nordicsemi/bluetooth-numbers-database",
+                "license_spdx": "BSD-3-Clause",
+                "license_url": "https://github.com/nordicsemi/bluetooth-numbers-database/blob/master/LICENSE",
+                "redistribution": "allowed",
+                "classification": "DATA_ONLY",
+                "transform": "extract_bt_numbers_json_company_and_service",
+            }
+        )
+    return sources
 
 
 def _ambiguity_record(key: str, candidates: list[dict[str, Any]]) -> dict[str, Any]:
@@ -103,11 +119,7 @@ def dedupe_with_ledger(
 
 
 def build_flat_payload(records: list[dict[str, Any]]) -> bytes:
-    """Build the flat payload and mark ambiguity in the index itself.
-
-    The flag lets the bounded C reader return NEARBY_DB_AMBIGUOUS without parsing
-    JSON. The value still carries complete candidates/provenance for inspection.
-    """
+    """Build the flat payload and mark ambiguity in the index itself."""
     blob = bytearray()
     entries = bytearray()
     for rec in records:
@@ -145,7 +157,15 @@ def build_database(
     out: Path,
     db_version: int,
     build_epoch: int,
+    bt_company_ids: Path | None = None,
+    bt_service_uuids: Path | None = None,
+    bt_rev: str | None = None,
 ) -> dict[str, Any]:
+    if (bt_company_ids is None) != (bt_service_uuids is None):
+        raise ValueError("Bluetooth assigned-number company/service inputs must be supplied together")
+    if bt_company_ids is not None and bt_rev is None:
+        raise ValueError("Bluetooth assigned-number revision is required when inputs are supplied")
+
     by_extractor: dict[str, list[dict[str, Any]]] = {
         "ha_bluetooth": nearby_dbgen.extract_ha_bluetooth(ha_bluetooth, ha_rev),
         "ha_homekit": ha_lan_sources.extract_ha_homekit(ha_zeroconf, ha_rev),
@@ -156,16 +176,25 @@ def build_database(
     }
     z2m_records, z2m_stats = z2m_sources.extract_z2m(z2m_root, z2m_rev)
     by_extractor["z2m"] = z2m_records
+    if bt_company_ids is not None and bt_service_uuids is not None and bt_rev is not None:
+        by_extractor["bluetooth_assigned_numbers"] = (
+            bt_numbers_sources.extract_company_ids(bt_company_ids, bt_rev)
+            + bt_numbers_sources.extract_service_uuids(bt_service_uuids, bt_rev)
+        )
 
     raw_records: list[dict[str, Any]] = []
     raw_counts: dict[str, int] = {}
+    raw_source_counts: dict[str, int] = {}
     for name, records in by_extractor.items():
         raw_counts[name] = len(records)
         raw_records.extend(records)
+        for rec in records:
+            source_id = str(rec.get("source_id", "unknown"))
+            raw_source_counts[source_id] = raw_source_counts.get(source_id, 0) + 1
 
     records, conflict_ledger = dedupe_with_ledger(raw_records)
     payload = build_flat_payload(records)
-    sources = _source_manifest(ha_rev, zha_rev, z2m_rev)
+    sources = _source_manifest(ha_rev, zha_rev, z2m_rev, bt_rev if bt_company_ids is not None else None)
 
     counts: dict[str, int] = {}
     for rec in records:
@@ -181,6 +210,7 @@ def build_database(
         "record_count": len(records),
         "raw_record_count": len(raw_records),
         "record_counts": dict(sorted(counts.items())),
+        "raw_source_counts": dict(sorted(raw_source_counts.items())),
         "conflict_count": len(conflict_ledger),
         "ambiguous_key_count": len(conflict_ledger),
         "conflict_keys_sample": [entry["key"] for entry in conflict_ledger[:50]],
@@ -200,7 +230,7 @@ def build_database(
             "key_order": "utf8-byte-lexicographic",
             "index_flags": {"0x0001": "ambiguous; value ref valid; not a confirmed match"},
         },
-        "generator": {"name": "full_dbgen.py", "version": 4},
+        "generator": {"name": "full_dbgen.py", "version": 5},
     }
     manifest_bytes = nearby_dbgen.canonical_json(manifest)
     file_size = nearby_dbgen.HEADER_SIZE + len(manifest_bytes) + len(payload)
@@ -218,6 +248,7 @@ def build_database(
         "bytes": file_size,
         "records": len(records),
         "raw_records": len(raw_records),
+        "raw_source_counts": dict(sorted(raw_source_counts.items())),
         "counts": dict(sorted(counts.items())),
         "conflicts": len(conflict_ledger),
         "ambiguous_keys": len(conflict_ledger),

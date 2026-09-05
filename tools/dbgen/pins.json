@@ -22,5 +22,14 @@
     "revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
     "source_path": "src/devices",
     "license_spdx": "MIT"
+  },
+  "bluetooth_numbers_nordic": {
+    "repository": "nordicsemi/bluetooth-numbers-database",
+    "revision": "d379cc06c9c3681bc1c1cd4d61c246a0b0f80b0e",
+    "source_paths": [
+      "v1/company_ids.json",
+      "v1/service_uuids.json"
+    ],
+    "license_spdx": "BSD-3-Clause"
   }
 }
