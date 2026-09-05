@@ -2,48 +2,72 @@
 
 Target: Waveshare ESP32-C6-Touch-LCD-1.9  
 Reference SDK: ESP-IDF v6.1  
-Status: harness committed; numeric results require a physical-board run and are intentionally not fabricated here.
+Status: executable harness committed; numeric results require a physical-board run and are intentionally not fabricated here.
+
+Use `docs/hardware/BENCH_REQUIRED.md` as the execution sheet. All values below remain `PENDING_BENCH` until observed on the target board.
 
 ## Capture method
 
 For every module or mode transition, record at minimum:
 
 - `esp_timer_get_time()` before/after init, start, stop and deinit;
-- `esp_get_free_heap_size()` before/after;
+- `esp_get_free_heap_size()` and `esp_get_minimum_free_heap_size()`;
 - task stack high-water mark for any created task;
 - configured/static RX buffer counts where relevant;
 - whether deinit restores heap;
 - first successful RX/event latency after a mode switch;
-- handoff drop counters under a controlled scan interval.
+- handoff record and drop counts under a controlled scan interval;
+- SD write/read throughput and latency;
+- LCD draw-call latency while SD is active.
 
-The current `firmware/main/main.c` already logs basic heap/stack/time marks for scan-session primitives, handoff queue allocation and LCD init. Extend the same style rather than introducing a benchmark framework.
+The firmware harness logs the same primitives directly. Do not add a separate benchmark framework.
 
 ## Results table
 
-| Module / phase | Init us | Stop/deinit us | Free heap before | Free heap after | Task stack HWM | RX/static buffers | Heap recovered after deinit | Notes |
+| Module / phase | Init/start us | Stop/deinit us | Free heap before | Free heap after | Task stack HWM | RX/static buffers | Heap recovered | Notes |
 |---|---:|---:|---:|---:|---:|---:|---|---|
-| scan-session + smoke test | pending board run | n/a | pending | pending | pending | static mutex | n/a | verifies BUSY while session owns gate |
-| native Wi-Fi handoff queues | pending board run | n/a | pending | pending | caller task | 4 x bounded slots | static | no per-packet malloc |
-| native NimBLE handoff queues | pending board run | n/a | pending | pending | caller task | 8 x bounded slots | static | legacy GAP path first |
-| native 802.15.4 handoff queues/callback | pending board run | n/a | pending | pending | ISR + worker | 8 x bounded copied slots | static | driver frame released in ISR |
-| ST7789V2 panel | pending board run | pending | pending | pending | caller/LVGL later | SPI DMA descriptors | pending | 170x320, gap 35/0 |
-| Wi-Fi driver | pending | pending | pending | pending | pending | record sdkconfig | pending | active scan + promisc separately |
-| NimBLE host/controller | pending | pending | pending | pending | pending | record sdkconfig | pending | passive/active scan separately |
-| IEEE 802.15.4 radio | pending | pending | pending | pending | ISR + worker | record IDF RX buffer setting | pending | channels 11..26 |
-| LVGL | pending | pending | pending | pending | pending | draw buffers | pending | test with realistic partial buffer |
-| FATFS/SDSPI | pending | pending | pending | pending | caller | FATFS/SPI buffers | pending | same SPI2 bus as LCD |
-| OpenThread | pending | pending | pending | pending | pending | pending | pending | only after raw 802.15.4 baseline |
-| Zigbee component | pending | pending | pending | pending | pending | pending | pending | only after raw 802.15.4 baseline |
+| scan-session owner/fatal smoke | PENDING_BENCH | n/a | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | static mutex | n/a | fatal latch must block gate release |
+| native Wi-Fi handoff | PENDING_BENCH | n/a | PENDING_BENCH | PENDING_BENCH | caller | 4 bounded frame slots | static | no per-packet malloc |
+| NimBLE legacy handoff | PENDING_BENCH | n/a | PENDING_BENCH | PENDING_BENCH | caller | 8 bounded legacy slots | static | native `ble_gap_disc_desc` copied by value |
+| NimBLE extended handoff | PENDING_BENCH | n/a | PENDING_BENCH | PENDING_BENCH | caller | 4 x 255-byte extended slots | static | native `ble_gap_ext_disc_desc`; preserve data_status; no D reassembly |
+| native 802.15.4 handoff | PENDING_BENCH | n/a | PENDING_BENCH | PENDING_BENCH | ISR + worker | 8 bounded copied slots | static | driver frame released in ISR |
+| ST7789V2 panel | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | caller/LVGL | SPI DMA descriptors | PENDING_BENCH | 170x320, logical gap 35/0 |
+| CST816 | PENDING_BENCH | n/a | PENDING_BENCH | PENDING_BENCH | caller | i2c_master bus/device handles | PENDING_BENCH | raw geometry/orientation requires corner run |
+| Wi-Fi active scan | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | driver + caller | record sdkconfig | PENDING_BENCH | count APs + first result latency |
+| Wi-Fi promiscuous | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | Wi-Fi driver + consumer | 4 D handoff slots | PENDING_BENCH | record RX count/drop count |
+| NimBLE host/EXT discovery | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | NimBLE host | record sdkconfig + D slots | PENDING_BENCH | uncoded + coded PHY parameters |
+| IEEE 802.15.4 radio | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | ISR + worker | record IDF RX config | PENDING_BENCH | channels 11..26 |
+| FATFS/SDSPI mount | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | caller | FATFS/SPI buffers | PENDING_BENCH | same SPI2 as LCD |
+| SD 1 MiB write/read | PENDING_BENCH | n/a | PENDING_BENCH | PENDING_BENCH | caller | 4 KiB bench buffer | n/a | write/read KiB/s + exact verify |
+| whole-SD destructive format | PENDING_BENCH | n/a | PENDING_BENCH | PENDING_BENCH | caller | bounded raw sector buffer | n/a | not a secure erase claim |
+| temporary SoftAP + HTTP | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | httpd/Wi-Fi | record server/Wi-Fi config | PENDING_BENCH | phone connectivity required |
+| DB streaming upload | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | httpd + caller | 2048-byte HTTP chunk + storage buffers | PENDING_BENCH | C finalize must precede promotion |
+| LCD + SD contention | PENDING_BENCH | n/a | PENDING_BENCH | PENDING_BENCH | SD worker HWM PENDING_BENCH | shared SPI2 | n/a | max LCD draw-call us + SD KiB/s |
+| 100-cycle lifecycle stress | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | PENDING_BENCH | existing subsystem buffers | PENDING_BENCH | scan/radio/SD plus repeated Web lifecycle |
 
-## Required RF switch matrix run
+## Required RF switch matrix
 
-Measure at least these transitions while the single product scan-session lock remains held across the whole sequence:
+Measure these transitions while the single product scan-session lock remains held across the whole sequence:
 
 ```text
 Wi-Fi active scan -> Wi-Fi promiscuous
-Wi-Fi promiscuous -> NimBLE scan
-NimBLE scan -> IEEE 802.15.4 promiscuous
+Wi-Fi promiscuous -> NimBLE extended discovery
+NimBLE discovery -> IEEE 802.15.4 promiscuous
 IEEE 802.15.4 promiscuous -> Wi-Fi/LAN focus
 ```
 
-For each transition record which public stop/disable API was required, whether the next stack could remain initialized, transition latency, first-event latency and any handoff drops. Do not infer coexistence behavior from documentation when it can be measured on the board.
+For each transition record which public stop/disable API was required, transition latency, first-event latency, RF phase state and handoff drops. A next phase must remain rejected until the current phase has been proven down.
+
+## Stress acceptance notes
+
+The long run is not accepted merely because it reaches cycle 100. Compare:
+
+- free heap at cycle 0, every 10 cycles and final;
+- minimum free heap over the run;
+- task stack high-water marks;
+- accumulated Wi-Fi / BLE legacy / BLE extended / 802.15.4 drops;
+- SD mount/unmount failures;
+- Web start/stop failures;
+- scan fatal-latch/recovery events.
+
+Any unexplained monotonic resource loss or gate/RF phase left owned after a successful cleanup is a failure requiring code investigation, not a number to tune around.
