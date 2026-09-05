@@ -28,6 +28,9 @@ esp_err_t scan_session_end(void);
 /** True while a complete scan session owns the gate. */
 bool scan_session_is_active(void);
 
+/** Return ESP_OK only to the task that currently owns the complete scan. */
+esp_err_t scan_session_require_scan_owner(void);
+
 /** Monotonic generation incremented each time a scan session starts. */
 uint32_t scan_session_generation(void);
 
@@ -40,8 +43,20 @@ uint32_t scan_session_generation(void);
  */
 esp_err_t scan_session_competing_op_try_begin(void);
 
+/** Return ESP_OK only to the task that owns the current competing operation. */
+esp_err_t scan_session_require_competing_owner(void);
+
 /** Release a successful competing-op reservation from the same task. */
 esp_err_t scan_session_competing_op_end(void);
+
+/**
+ * Error-path helper for the current owner task.
+ *
+ * If the calling task owns either a complete scan or a competing reservation,
+ * release it. If it owns neither, return ESP_ERR_INVALID_STATE. This function
+ * deliberately does not force-release a mutex owned by another task.
+ */
+esp_err_t scan_session_cleanup_owned(void);
 
 #ifdef __cplusplus
 }
