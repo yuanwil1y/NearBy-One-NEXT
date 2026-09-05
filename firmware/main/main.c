@@ -12,6 +12,17 @@
 #include "radio_runtime.h"
 #include "scan_session.h"
 
+#if defined(CONFIG_NEARBY_AGENT_D_LCD_VISUAL_BENCH) || \
+    defined(CONFIG_NEARBY_AGENT_D_TOUCH_BENCH) || \
+    defined(CONFIG_NEARBY_AGENT_D_SD_IO_BENCH) || \
+    defined(CONFIG_NEARBY_AGENT_D_SD_DESTRUCTIVE_BENCH) || \
+    defined(CONFIG_NEARBY_AGENT_D_WEB_BENCH) || \
+    defined(CONFIG_NEARBY_AGENT_D_SPI_CONTENTION_BENCH) || \
+    defined(CONFIG_NEARBY_AGENT_D_STRESS_BENCH)
+#include "agent_d_bench.h"
+#define NEARBY_AGENT_D_HAS_EXTRA_BENCH 1
+#endif
+
 static const char *TAG = "nearby-hw-audit";
 
 static void log_runtime_mark(const char *label, int64_t started_us)
@@ -31,7 +42,14 @@ static esp_err_t scan_session_smoke_test(void)
 
     if (scan_session_competing_op_try_begin() != ESP_ERR_INVALID_STATE) return ESP_FAIL;
 
-    /* Exercise owner-aware error cleanup instead of only the happy end path. */
+    /* Fatal cleanup is a hard gate: end must fail until recovery clears it. */
+    err = scan_session_mark_fatal(ESP_FAIL);
+    if (err != ESP_OK || scan_session_fatal_error() != ESP_FAIL) return ESP_FAIL;
+    if (scan_session_end() != ESP_ERR_INVALID_STATE || !scan_session_is_active()) return ESP_FAIL;
+    err = scan_session_recovery_clear_fatal();
+    if (err != ESP_OK) return err;
+
+    /* Exercise owner-aware cleanup on the recovered happy path. */
     err = scan_session_cleanup_owned();
     if (err != ESP_OK || scan_session_is_active()) return ESP_FAIL;
 
@@ -134,7 +152,7 @@ void app_main(void)
 
     ESP_ERROR_CHECK(scan_session_init());
     ESP_ERROR_CHECK(scan_session_smoke_test());
-    log_runtime_mark("scan-session owner/recovery smoke", started_us);
+    log_runtime_mark("scan-session owner/fatal-recovery smoke", started_us);
 
     started_us = esp_timer_get_time();
     ESP_ERROR_CHECK(nearby_wifi_handoff_init());
@@ -155,7 +173,19 @@ void app_main(void)
     ESP_ERROR_CHECK(radio_bench_smoke());
 #endif
 
+#ifdef NEARBY_AGENT_D_HAS_EXTRA_BENCH
+    ESP_ERROR_CHECK(agent_d_bench_run(&lcd));
+#endif
+
+#if MYNEWT_VAL(BLE_EXT_ADV)
+    ESP_LOGI(TAG,
+             "primitives ready; drops wifi=%" PRIu32 " ble_legacy=%" PRIu32
+             " ble_ext=%" PRIu32 " i154=%" PRIu32,
+             nearby_wifi_rx_drop_count(), nearby_ble_rx_drop_count(),
+             nearby_ble_ext_rx_drop_count(), nearby_i154_rx_drop_count());
+#else
     ESP_LOGI(TAG,
              "primitives ready; drops wifi=%" PRIu32 " ble=%" PRIu32 " i154=%" PRIu32,
              nearby_wifi_rx_drop_count(), nearby_ble_rx_drop_count(), nearby_i154_rx_drop_count());
+#endif
 }
