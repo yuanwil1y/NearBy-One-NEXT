@@ -94,15 +94,17 @@ static esp_err_t status_handler(httpd_req_t *req)
     esp_err_t err = nearby_web_mgmt_get_status(&status);
     if (err != ESP_OK) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "status failed");
 
-    char response[256];
+    char response[320];
     snprintf(response, sizeof(response),
              "{\"active\":%s,\"ssid\":\"%s\",\"ap_ipv4\":\"%s\","
-             "\"sta_connected\":%s,\"sta_ipv4\":\"%s\"}",
+             "\"sta_connected\":%s,\"sta_ipv4\":\"%s\","
+             "\"db_format_authorized\":%s}",
              status.active ? "true" : "false",
              status.ssid,
              status.ap_ipv4,
              status.sta_connected ? "true" : "false",
-             status.sta_ipv4);
+             status.sta_ipv4,
+             status.db_format_authorized ? "true" : "false");
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, response);
 }
@@ -175,6 +177,26 @@ static esp_err_t wifi_connect_handler(httpd_req_t *req)
     return send_status_plain(req, "202 Accepted", "connecting");
 }
 
+static esp_err_t db_preflight_result_handler(httpd_req_t *req)
+{
+    char body[64];
+    char safe[8] = {0};
+    esp_err_t err = recv_complete_body(req, body, sizeof(body));
+    if (err != ESP_OK ||
+        httpd_query_key_value(body, "safe_to_format", safe, sizeof(safe)) != ESP_OK ||
+        (strcmp(safe, "1") != 0 && strcmp(safe, "0") != 0)) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                   "safe_to_format=1|0 required");
+    }
+
+    /* Transport only: C owns how this verdict was derived. */
+    err = nearby_db_storage_set_preflight_safe_to_format(strcmp(safe, "1") == 0);
+    if (err != ESP_OK) {
+        return send_status_plain(req, "409 Conflict", "preflight result not accepted in current state");
+    }
+    return send_plain(req, strcmp(safe, "1") == 0 ? "authorized" : "cleared");
+}
+
 static esp_err_t db_format_handler(httpd_req_t *req)
 {
     char query[64] = {0};
@@ -183,6 +205,9 @@ static esp_err_t db_format_handler(httpd_req_t *req)
         httpd_query_key_value(query, "confirm", confirm, sizeof(confirm)) != ESP_OK ||
         strcmp(confirm, "ERASE") != 0) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "explicit confirm=ERASE required");
+    }
+    if (!nearby_db_storage_preflight_is_authorized()) {
+        return send_status_plain(req, "409 Conflict", "C preflight safe_to_format authorization required");
     }
 
     esp_err_t err = nearby_db_storage_prepare_whole_sd(true);
@@ -231,6 +256,7 @@ static esp_err_t register_api_handlers(void)
         {.uri = "/api/status", .method = HTTP_GET, .handler = status_handler},
         {.uri = "/api/wifi/scan", .method = HTTP_GET, .handler = wifi_scan_handler},
         {.uri = "/api/wifi/connect", .method = HTTP_POST, .handler = wifi_connect_handler},
+        {.uri = "/api/db/preflight-result", .method = HTTP_POST, .handler = db_preflight_result_handler},
         {.uri = "/api/db/format", .method = HTTP_POST, .handler = db_format_handler},
         {.uri = "/api/db/upload", .method = HTTP_POST, .handler = db_upload_handler},
     };
@@ -254,6 +280,9 @@ esp_err_t nearby_web_mgmt_start(void)
     if (s_server != NULL) return ESP_ERR_INVALID_STATE;
     esp_err_t err = scan_session_competing_op_try_begin();
     if (err != ESP_OK) return err;
+
+    /* Never carry an unconsumed destructive authorization across portal starts. */
+    (void)nearby_db_storage_set_preflight_safe_to_format(false);
 
     err = nearby_wifi_driver_init();
     if (err != ESP_OK) goto fail_gate;
@@ -306,6 +335,7 @@ fail_ap:
 fail_wifi:
     (void)nearby_wifi_driver_deinit();
 fail_gate:
+    (void)nearby_db_storage_set_preflight_safe_to_format(false);
     (void)scan_session_competing_op_end();
     memset(&s_status, 0, sizeof(s_status));
     return err;
@@ -322,6 +352,7 @@ esp_err_t nearby_web_mgmt_stop(void)
         s_server = NULL;
     }
     if (nearby_db_upload_is_active()) (void)nearby_db_upload_cancel();
+    (void)nearby_db_storage_set_preflight_safe_to_format(false);
     (void)nearby_wifi_sta_disconnect();
 
     if (s_ap_netif != NULL) {
@@ -346,6 +377,7 @@ esp_err_t nearby_web_mgmt_get_status(nearby_web_mgmt_status_t *out_status)
     format_ipv4(nearby_wifi_sta_netif(), status.sta_ipv4);
     wifi_ap_record_t ap_info;
     status.sta_connected = esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK;
+    status.db_format_authorized = nearby_db_storage_preflight_is_authorized();
     *out_status = status;
     return ESP_OK;
 }
