@@ -42,6 +42,13 @@ esp_err_t nearby_i154_receive_start(uint8_t channel);
 esp_err_t nearby_i154_receive_stop(void);
 bool nearby_i154_receive_is_active(void);
 
+/**
+ * Error-path cleanup while the current task still owns the complete scan gate.
+ * Stops 802.15.4, tears down NimBLE, then tears down Wi-Fi; attempts every
+ * cleanup step and returns the first error encountered.
+ */
+esp_err_t nearby_radio_scan_cleanup_all(void);
+
 #ifdef __cplusplus
 }
 #endif
