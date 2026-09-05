@@ -1,142 +1,141 @@
-# Agent A — Home Assistant Device/Entity semantics
+# Agent A — Home Assistant Device / Entity / State core
 
 ## Mission
 
-Own the Home Assistant semantic spine of NearBy One NEXT on ESP32-C6:
+Agent A owns one narrow job: **extract and adapt the smallest useful subset of Home Assistant Core that turns already-matched, already-parsed device data into Home Assistant-style Device / Entity / State runtime objects on ESP32-C6.**
+
+The boundary is:
 
 ```text
-Integration / Platform
-        ↓
-Device + Entity + State
-        ↓
-UI
+already matched + already parsed semantic input
+                    ↓
+               Agent A
+                    ↓
+          Device + Entity + State
+                    ↓
+                 Agent E UI
 ```
 
-Port the **smallest useful, faithful subset of Home Assistant Core semantics** to a transient RAM-only MCU runtime. The purpose of this layer is to normalize already-discovered/already-parsed devices so every integration looks like standard HA Device / Entity / State data to Agent E.
+Agent A does **not** discover, recognize, fingerprint, decode or classify devices. It only provides the HA semantic/runtime layer after those jobs are complete.
 
 ## Ultimate goal
 
-NearBy One NEXT should be able to add new vendors/protocols without changing the UI model and without inventing a NearBy-specific capability system.
+NearBy One NEXT should have a compact, RAM-only Home Assistant semantic core whose public behavior remains stable regardless of protocol or vendor.
 
-The long-term success condition is:
+When upstream code says, in semantic terms:
 
 ```text
-Agent D: native hardware/radio input
+Device
+  name = "Temperature Sensor"
+  manufacturer = "Vendor"
+  model = "Model X"
+
+Entities
+  sensor.temperature = 23.4 °C
+  sensor.humidity = 51 %
+```
+
+Agent A must be able to represent that as normal HA-style Device / Entity / State data without knowing whether the source was BLE, Wi-Fi, Zigbee, Thread, Matter, mDNS, SSDP or anything else.
+
+The architecture is:
+
+```text
+Agent D: hardware / native radio input
         ↓
 Agent B: scanner + protocol parsing
         ↓
-Agent C: recognition/product metadata
+Agent C: recognition / matching / product knowledge
         ↓
-Agent A: Integration/Platform mapping
+semantic matched result
         ↓
-HA Device / Entity / State
+Agent A: HA Device / Entity / State core
         ↓
 Agent E: generic UI
 ```
 
-For a new supported device, Agent A should only need an integration/platform mapper from an **already parsed and identified input** into HA Device/Entity/State. Agent E must not need vendor/protocol-specific UI changes.
+## Non-negotiable rules
 
-## Non-negotiable architecture rules
-
-- Follow current Home Assistant Core concepts and naming as directly as practical.
-- **Do not invent Capability, Action, ViewModel, Provider, Adapter framework, DeviceGraph, universal action schema, or NearBy-specific type systems.**
-- HA-defined semantics win: Integration, Platform, Device, Entity, State, attributes, domains, device_class, supported_features, services.
-- Do not build an abstraction above Entity.
-- Do not build a proprietary cross-protocol device-fusion layer for v0.1.
+- Follow current Home Assistant Core semantics and naming as directly as practical.
+- Prefer reusing/copying/adapting HA Core Apache-2.0 concepts/code over inventing replacements.
+- **Do not invent Capability, Action, ViewModel, Provider, Adapter framework, DeviceGraph, universal action schema, or NearBy-specific semantic types.**
+- Device is the physical grouping.
+- Entity is the state/control unit.
+- State is `entity_id + state + attributes`.
 - Runtime is RAM-only. Every boot starts empty.
 - No Device/Entity/State persistence.
-- No recorder, history, restore-state, automations, scenes, areas/rooms, long-term statistics, persistent dashboards, config-flow persistence, or HA server storage machinery.
-- Prefer copying/adapting Apache-2.0 Home Assistant Core names/semantics/code where practical. Track source path, upstream commit and license for copied code.
-- Keep C/C++ APIs small, direct and boring. Avoid framework-building.
+- No recorder, history, restore-state, automations, scenes, areas/rooms, long-term statistics, persistent dashboards, config-flow persistence, SQLite registry, or HA server storage machinery.
+- No proprietary cross-protocol device fusion.
+- Keep C/C++ APIs small, direct and boring.
+- Optimize representation for ESP32-C6 SRAM without changing HA semantics.
 
-## Ownership
+## Agent A owns
 
-Agent A owns:
+### 1. HA source audit and extraction
 
-- MCU-sized Integration lifecycle semantics.
-- MCU-sized Platform lifecycle semantics.
-- Device registry semantics and RAM representation.
-- Entity registry semantics and RAM representation.
-- State store/update semantics.
-- Device/Entity create/update/remove lifecycle for one boot session.
-- Device → Entity ownership.
-- Domain conventions needed by actual integrations.
-- HA service semantics for interactive Entities.
-- Public semantic API consumed by Agent E and integration glue.
-- Mock/pre-parsed fixtures that allow independent development before B/C/D are ready.
-- RAM footprint measurement and tuning of this semantic layer.
+Study and continuously track the relevant parts of Home Assistant Core, especially:
 
-## Explicitly not owned
+- `homeassistant/helpers/device_registry.py`
+- `homeassistant/helpers/entity_registry.py`
+- `homeassistant/helpers/entity.py`
+- `homeassistant/core.py` State semantics
+- `DeviceInfo`
+- domain semantics required by real matched inputs
 
-### Agent D owns
+For each useful HA field/behavior, decide:
 
-- Waveshare BSP.
-- ESP-IDF Wi-Fi/NimBLE/IEEE 802.15.4 drivers.
-- RF coexistence and scan-session hardware exclusion.
-- Native radio events/buffer lifetimes.
-- SD/LCD/touch/SoftAP/HTTP transport.
+- keep/copy/adapt;
+- represent more compactly;
+- omit because it only exists for HA server persistence/config/history.
 
-Agent A must never parse or depend directly on native ESP-IDF radio event structures.
+Maintain a precise source/field subset document and provenance for copied code.
 
-### Agent B owns
+### 2. RAM-only Device registry subset
 
-- Scanners.
-- BLE advertisement parsing.
-- Wi-Fi management-frame parsing.
-- mDNS/SSDP/DHCP discovery parsing.
-- Zigbee/802.15.4 protocol parsing.
-- Matter discovery parsing.
-- Vendor payload decoders such as Xiaomi BLE binary payload decoding.
+Provide the smallest useful Device representation and lifecycle:
 
-**Do not implement Xiaomi BLE advertisement parsing in Agent A.** A consumes a parsed Xiaomi fixture/result.
+- create/upsert;
+- lookup;
+- identifiers/connections where semantically useful;
+- name/manufacturer/model/model_id and other justified HA fields;
+- attach Entities;
+- remove;
+- cascade cleanup;
+- reset entire session.
 
-### Agent C owns
+### 3. RAM-only Entity registry subset
 
-- Recognition database format.
-- Product/fingerprint matching datasets.
-- ZHA quirks / Zigbee2MQTT / HA matcher-derived knowledge.
-- OUI, BLE assigned numbers, Matter VID/PID, product metadata.
-- DB generator, provenance and licensing.
+Provide the smallest useful Entity representation and lifecycle using HA semantics:
 
-Agent A may consume recognition results such as manufacturer/model/profile IDs but must not embed or duplicate Agent C's large knowledge database.
+- `entity_id`;
+- `unique_id`;
+- `domain`;
+- `platform` only if needed to preserve HA identity semantics;
+- `device_id`;
+- `device_class`;
+- `entity_category` if justified;
+- `name`;
+- `icon` if useful;
+- `unit_of_measurement`;
+- `supported_features` where needed;
+- enabled/available runtime state where needed;
+- create/upsert/remove/enumerate.
 
-### Agent E owns
+### 4. RAM-only State store
 
-- LVGL rendering.
-- Device-card layout.
-- Entity control widgets.
-- Settings/Web Portal visuals.
+Provide:
 
-Agent A exposes semantics; it does not add UI-specific ViewModels.
+- `entity_id`;
+- state string;
+- bounded attributes;
+- create/update/remove;
+- lightweight notification for UI refresh;
+- full reset on boot/session reset.
 
-## Dependency rule: never block waiting for another Agent
+Do not port HA's full event bus or history/context machinery.
 
-If B/C/D input is not ready, continue using a small **pre-parsed fixture** matching the expected semantic boundary.
+### 5. Existing HA domain/service semantics
 
-Example:
-
-```text
-parsed Xiaomi BLE fixture
-  manufacturer = Xiaomi
-  model = LYWSD03MMC
-  unique source identity = ...
-  temperature = 23.4
-  humidity = 51
-  battery = 82
-        ↓
-Agent A xiaomi_ble integration/platform glue
-        ↓
-Device
-├─ sensor.temperature
-├─ sensor.humidity
-└─ sensor.battery
-```
-
-The fixture must contain decoded semantic values, not raw BLE bytes. When B/C are ready, replace only the fixture producer; do not redesign A's Device/Entity/State core.
-
-## Domain policy
-
-Initial domains:
+Start with:
 
 - `sensor`
 - `binary_sensor`
@@ -144,15 +143,9 @@ Initial domains:
 - `light`
 - `button`
 
-Add another domain only when a real integration requires an existing HA domain, for example `number`, `select`, `climate`, `cover`, `lock`, `media_player`, `device_tracker`.
+Add another domain only when upstream matched semantic data actually requires an existing HA domain such as `number`, `select`, `climate`, `cover`, `lock`, `media_player`, or `device_tracker`.
 
-Never add speculative NearBy-specific domains.
-
-Use existing HA `device_class`, state values, attributes and `supported_features` semantics whenever they already describe the device.
-
-## Service policy
-
-Preserve HA service naming/direction where interaction exists, for example:
+Preserve HA service names where interaction exists, for example:
 
 - `switch.turn_on`
 - `switch.turn_off`
@@ -160,234 +153,269 @@ Preserve HA service naming/direction where interaction exists, for example:
 - `light.turn_off`
 - `button.press`
 
-Do not create a generic Action layer. An Entity's integration-owned service callback should translate the HA service into the protocol operation and then publish resulting State.
+Do not add a generic Action abstraction.
 
-## Runtime lifecycle target
+### 6. Stable public semantic API
+
+Provide Agent E and upstream glue with a small API that can:
+
+```text
+upsert Device
+upsert Entity
+set State/attributes
+remove Entity/Device
+reset session
+enumerate Devices
+enumerate Entities for a Device
+get State
+subscribe to lightweight State changes
+invoke an HA Entity service callback
+```
+
+The API accepts **semantic data only**. It must not accept raw BLE advertisements, Wi-Fi frames, Zigbee frames, SSDP packets, mDNS records, vendor payload bytes, recognition DB records, or protocol-specific scanner structures.
+
+## Explicitly NOT owned
+
+### Agent D
+
+Owns:
+
+- Waveshare BSP;
+- ESP-IDF Wi-Fi/NimBLE/IEEE 802.15.4;
+- LCD/touch/SD;
+- RF coexistence;
+- scan-session hardware exclusion;
+- SoftAP/HTTP transport;
+- native event/buffer lifetime.
+
+Agent A never depends directly on native radio event structures.
+
+### Agent B
+
+Owns:
+
+- scanning;
+- protocol discovery;
+- BLE advertisement parsing;
+- Wi-Fi frame parsing;
+- mDNS/SSDP/DHCP parsing;
+- Zigbee/802.15.4 parsing;
+- Matter discovery parsing;
+- vendor binary payload decoders.
+
+Agent A must not contain BLE/Wi-Fi/Zigbee/Matter packet parsing or vendor decoder code.
+
+### Agent C
+
+Owns:
+
+- recognition/matching database;
+- fingerprints/product tables;
+- HA discovery match data;
+- ZHA quirks / Zigbee2MQTT-derived knowledge;
+- OUI/BLE/Matter/Zigbee assigned-number data;
+- product/vendor recognition metadata;
+- database generation/format/provenance.
+
+Agent A consumes the **result** of matching, never the matching database itself.
+
+### Agent E
+
+Owns:
+
+- LVGL UI;
+- Device cards;
+- Entity widgets;
+- Settings/Web Portal visuals.
+
+Agent A exposes HA semantics only and never adds a UI-specific ViewModel.
+
+## Critical boundary rule
+
+Agent A must **not create vendor-specific integrations or parser modules** such as:
+
+```text
+xiaomi_ble/
+switchbot/
+shelly/
+```
+
+unless the only content is a temporary test fixture outside production runtime. Production vendor/protocol interpretation belongs upstream in B/C.
+
+A test fixture should be generic semantic input, for example:
+
+```text
+matched_device_fixture
+  name = "Test Sensor"
+  manufacturer = "Test Vendor"
+  model = "T100"
+
+matched_entities
+  sensor.temperature = 23.4 °C
+  sensor.humidity = 51 %
+  sensor.battery = 82 %
+```
+
+The purpose is to prove Device/Entity/State behavior, not vendor support.
+
+## Runtime lifecycle
 
 ```text
 BOOT
  ↓
-empty Device / Entity / State registries
+empty Device / Entity / State
  ↓
-parsed + recognized discovery arrives
+upstream matched semantic result arrives
  ↓
-Integration match
+Device upsert
  ↓
-Platform creates/updates Device + Entities
+Entity upsert(s)
  ↓
-State updates
+State publish/update
  ↓
-UI enumerates Device/Entity/State
+Agent E enumerates/renders
  ↓
-optional Entity service call
+optional HA service callback
  ↓
-integration/protocol operation
+upstream protocol layer performs action
  ↓
-State update
+State updated
  ↓
-device/session removal
+Device disappears/session ends
  ↓
-remove Device/Entities/States
- ↓
-reboot/reset clears everything
+remove/reset
 ```
 
-No runtime registry content survives reboot.
+Agent A does not decide how a device was found, matched, decoded or controlled over the radio.
 
 ## Memory policy
 
-ESP32-C6 has no PSRAM in the target board configuration, so semantic convenience must not consume most of SRAM.
+The target ESP32-C6 has no PSRAM. The semantic core must leave substantial SRAM for LVGL, Wi-Fi, NimBLE, 802.15.4, FreeRTOS stacks, SD/FATFS and scanner buffers.
 
 Requirements:
 
-1. Maintain a host-buildable footprint test/report using `sizeof()` for Device, Entity, State, attribute records and total default pools.
-2. Document total static RAM used by `ha_core` under default capacities.
-3. Reduce oversized fixed strings/capacities when they are not justified by the real UI/integration contract.
-4. Keep capacities compile-time configurable.
-5. Prefer smaller bounded pools or compact representations over a ~200 KB default semantic core.
-6. Do not add heap-heavy generic containers, JSON trees, `std::map`, `std::string` graphs, reflection or plugin registries.
-7. Treat Agent D's later measured LVGL/radio/stack RAM requirements as the authority for final pool sizing.
+1. Maintain host-buildable `sizeof()` / pool footprint reporting.
+2. Document total static RAM under default capacities.
+3. Keep capacities compile-time configurable.
+4. Reduce unjustified fixed string sizes/capacities.
+5. Test capacity exhaustion explicitly.
+6. Avoid heap-heavy generic containers, JSON trees, reflection, plugin registries and manager frameworks.
+7. Treat Agent D's measured system RAM budget as authority for final sizing.
 
-If memory pressure appears, preserve HA semantics first and optimize representation second; do not solve memory by inventing a new semantic model.
+Do not solve RAM pressure by inventing a different semantic model.
 
 ## Long-term roadmap
 
-### Phase 1 — HA semantic audit and minimal core
+### Phase 1 — HA semantic audit
 
-- Audit current HA Core Device Registry, Entity Registry, State, Entity and initial domains.
-- Maintain copied/omitted field table with reasons.
-- Implement RAM-only Device/Entity/State create/update/remove/enumeration.
-- Implement basic service callback direction.
-- Maintain deterministic UI fixtures.
-- Maintain host smoke tests.
+- Track current HA Device Registry / Entity Registry / State behavior.
+- Maintain kept/omitted field tables.
+- Record upstream path/commit/license.
+- Identify exact code/semantics that can be copied or adapted.
 
-This phase is complete only when boot-empty/reset behavior and cascade removal are tested.
+### Phase 2 — minimal RAM-only core
 
-### Phase 2 — RAM budget and representation hardening
+- Device create/update/remove/enumerate.
+- Entity create/update/remove/enumerate.
+- Device → Entity ownership.
+- State create/update/remove.
+- cascade cleanup.
+- reset to boot-empty.
+- basic HA service callback semantics.
 
-- Add `sizeof()`/pool footprint reporting.
-- Tune default capacities/string sizes for ESP32-C6.
-- Test capacity exhaustion and failure behavior.
-- Test invalid IDs, duplicate unique IDs, missing Device references, oversized attributes and removal edge cases.
-- Keep all failures explicit; never silently corrupt registry state.
+### Phase 3 — RAM hardening
 
-Do this before expanding integration count.
+- measure struct/pool sizes;
+- reduce default footprint;
+- test boundary/capacity behavior;
+- test duplicate identity and invalid references;
+- test reset/removal safety;
+- ensure no stale pointers or corrupt registry state.
 
-### Phase 3 — extremely thin Integration / Platform lifecycle scaffold
+### Phase 4 — generic matched-input fixture contract
 
-Add only enough structure to express HA's direction:
+Define the thinnest practical semantic ingestion shape needed to populate Device/Entity/State from already-matched data.
 
-```text
-integration setup
- -> platform setup
- -> parsed observation/result
- -> Device/Entity create/update
- -> State publish
- -> teardown/remove
-```
+Do **not** turn this into a new abstraction framework. If direct calls such as `ha_device_upsert()`, `ha_entity_upsert()`, and `ha_state_set()` are sufficient, prefer those over adding another layer.
 
-Rules:
-
-- No full HA config-entry framework.
-- No asyncio/event bus clone.
-- No plugin VM/loader.
-- No provider/adapter hierarchy.
-- Do not create generic lifecycle machinery unless at least two integrations need the same operation.
-- Prefer functions and small structs over manager classes/framework objects.
-
-### Phase 4 — first vertical semantic PoCs using pre-parsed fixtures
-
-Start with a parsed Xiaomi BLE environmental-sensor fixture because its Device → multiple sensor Entities mapping is simple and proves the model.
-
-Expected shape:
-
-```text
-Xiaomi physical Device
-├─ sensor.temperature
-├─ sensor.humidity
-└─ sensor.battery
-```
-
-Agent A may implement the `xiaomi_ble` Integration/Platform mapping but **not BLE scanning or Xiaomi binary decoding**.
-
-After that, add contrasting fixture-driven PoCs only when useful:
-
-- a switch/light device to prove service callbacks;
-- a LAN/Matter/Zigbee-derived parsed fixture to prove protocol independence.
-
-The purpose is semantic validation, not vendor coverage.
+Use generic fixtures only to test the boundary.
 
 ### Phase 5 — Agent E integration
 
-Replace E's UI-only mock Device registry with enumeration of A's registries.
+Make E consume A directly:
 
-Provide stable APIs so E can:
-
-- enumerate Devices for icon/name cards;
-- enumerate Entities belonging to a selected Device;
-- fetch State/attributes;
-- subscribe to lightweight state-change notification;
+- enumerate Devices for the Nearby list;
+- enumerate Entities attached to a selected Device;
+- fetch States/attributes;
+- receive lightweight state-change notification;
 - invoke HA Entity services.
 
-Do not add UI layout metadata beyond existing HA fields unless an existing HA semantic field can express it.
+E should not need its own runtime Device registry once this path is working.
 
-### Phase 6 — consume real B/C integration inputs
+### Phase 6 — consume real B/C output
 
-When B/C interfaces stabilize:
+When B/C stabilize their output, connect that already-matched semantic result to the existing A API with the smallest glue possible.
 
-- replace pre-parsed fixtures with real parsed/matched records;
-- keep Device/Entity/State API unchanged where possible;
-- add integrations incrementally;
-- add only HA domains needed by those integrations.
+Rules:
 
-Do not absorb B/C code into A for convenience.
+- do not absorb B/C parsers or DB logic;
+- do not add vendor-specific branches to the core;
+- do not redesign Device/Entity/State because a protocol is different;
+- only add an existing HA field/domain when real semantic data requires it.
 
 ### Phase 7 — lifecycle/stress stabilization
 
-Test at least:
+Test:
 
 - repeated scan generations;
-- many Device upserts;
-- duplicate observations;
-- Entity state churn;
+- many Device/Entity upserts;
+- duplicate semantic observations;
+- State churn;
 - Device disappearance/removal;
-- repeated session reset;
+- repeated reset;
 - capacity exhaustion;
-- service calls while Entity is unavailable/disabled;
-- no stale pointers after removal/reset;
-- stable enumeration for Agent E during allowed UI interaction periods.
-
-Coordinate with B/D scan-session locking: A should reject/avoid service execution when the owning integration says the hardware path is unavailable/busy, without inventing a second radio scheduler.
-
-## Integration authoring rule
-
-Every integration added to Agent A should be visibly small. It should mainly answer:
-
-1. What physical Device is this?
-2. Which HA Entities belong to it?
-3. What are their current States/attributes?
-4. Which HA services are supported, if any?
-5. How are those service calls handed back to integration/protocol code?
-
-If an integration implementation starts accumulating radio parsing, product databases, UI formatting, persistent config or generic framework code, it has crossed an Agent boundary.
+- service calls on disabled/unavailable Entities;
+- stable enumeration for UI.
 
 ## Source reuse rule
 
-Before implementing a semantic behavior:
+Before implementing any semantic behavior:
 
-1. Check whether current HA Core already defines the behavior/name/field.
-2. Reuse that concept/name directly where practical.
-3. Copy/adapt Apache-2.0 source only when it materially reduces custom code and fits MCU constraints.
-4. Record upstream repository/path/commit/license for copied code.
-5. Do not recreate a feature HA already defines under a new NearBy name.
-
-## Tests expected to grow with the core
-
-Maintain host tests for:
-
-- boot-empty state;
-- Device create/update/remove;
-- identifier/connection lookup;
-- Entity identity uniqueness;
-- Device → Entity attachment;
-- State create/update/remove;
-- attributes;
-- service support/callbacks;
-- cascade deletion;
-- reset;
-- capacity boundaries;
-- fixture-driven integration mapping.
-
-ESP-IDF builds should consume the same core sources; avoid a separate host-only implementation.
+1. Check whether current Home Assistant Core already defines it.
+2. Reuse the same name and semantics where practical.
+3. Copy/adapt Apache-2.0 source when that genuinely reduces custom code and fits MCU constraints.
+4. Record upstream repository/path/commit/license.
+5. Never recreate an HA concept under a NearBy-specific name.
 
 ## Working style
 
-- Work continuously within this branch; do not wait for permission between roadmap phases when the next task is inside these boundaries.
+- Work continuously within this branch without asking for the next task when the next roadmap item is inside these boundaries.
+- If B/C/D are not ready, use generic semantic fixtures; do not wait and do not implement their work.
 - Keep commits small and descriptive.
 - Update audit/README/docs when public semantics change.
 - Do not merge the PR.
-- Do not broaden scope because another Agent is incomplete; use fixtures/stubs at the agreed boundary.
-- When choosing between a broad framework and a narrow working path, choose the narrow working path.
+- When choosing between a broad framework and a narrow direct implementation, choose the narrow direct implementation.
 
-## Near-term priority from current state
+## Near-term priority
 
-1. Measure and reduce current `ha_core` default static RAM footprint.
+1. Measure and reduce current `ha_core` static RAM footprint.
 2. Add footprint/capacity/edge-case tests.
-3. Add the thinnest practical Integration/Platform lifecycle scaffold.
-4. Add a **pre-parsed Xiaomi BLE fixture → Device/Entity/State** vertical PoC.
-5. Prepare stable enumeration/state/service APIs for Agent E to replace its private mock registry.
+3. Continue auditing HA Core for Device/Entity/State code that can be copied/adapted or safely omitted.
+4. Define/prove the minimal **generic already-matched semantic input → Device/Entity/State** path using fixtures only.
+5. Stabilize enumeration/state/service APIs for Agent E.
+6. Prepare A so real B/C output can plug in later without changing the core.
 
-Do not implement a real BLE parser while doing these tasks.
+**Do not implement Xiaomi BLE or any other vendor/protocol-specific production path.**
 
 ## Definition of long-term done
 
-Agent A is considered mature when:
+Agent A is mature when:
 
-- the semantic core fits comfortably alongside LVGL and radio stacks on the ESP32-C6 target;
-- runtime starts empty and remains entirely RAM-only;
-- several unrelated integrations map into the same Device/Entity/State model;
-- Agent E renders them without vendor/protocol branches;
-- service-capable Entities invoke integration callbacks using HA service semantics;
-- Device/Entity/State lifecycle is robust under repeated scans/removals/resets;
-- adding another supported device usually means adding a small integration mapper, not changing the core abstraction;
-- no Capability/ViewModel/proprietary semantic framework has appeared.
+- the HA semantic core fits comfortably alongside the rest of the ESP32-C6 system;
+- every boot starts with empty RAM-only registries;
+- already-matched semantic input can reliably produce HA Device/Entity/State objects;
+- Agent E renders Devices and Entities directly from A without vendor/protocol logic;
+- service-capable Entities expose HA service semantics through a thin callback;
+- lifecycle/reset/removal/capacity behavior is robust;
+- adding support for a new vendor/protocol normally changes B/C data/parsing, not A's core;
+- no Capability/ViewModel/proprietary semantic framework exists.
