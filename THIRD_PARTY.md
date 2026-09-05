@@ -19,7 +19,7 @@ A generated database MUST retain the source IDs used by each record and MUST emi
 
 ## Redistribution policy
 
-1. Apache-2.0 / MIT sources may be mechanically transformed when required notices are preserved.
+1. Apache-2.0 / MIT / BSD-family sources may be mechanically transformed when required notices are preserved.
 2. Datasets with terms that are not a standard open-source license stay `review-required` until redistribution rights are explicitly confirmed.
 3. GPL-family sources are not copied into distributable artifacts by default. They may be used as a reference/test oracle unless the project intentionally adopts compatible distribution terms.
 4. Parser/code dependencies are tracked separately from data. A data record may be redistributable while the decoder still requires compiled firmware code.
@@ -32,10 +32,13 @@ A generated database MUST retain the source IDs used by each record and MUST emi
 | `ha_core` | Home Assistant Core | Apache-2.0 | DATA_ONLY + DATA+PARSER by integration | allowed |
 | `zha_quirks` | zigpy/zha-device-handlers | Apache-2.0 | DATA+PARSER | allowed |
 | `z2m_converters` | Koenkk/zigbee-herdsman-converters | MIT | DATA+PARSER | allowed |
+| `bluetooth_numbers_nordic` | Nordic Semiconductor bluetooth-numbers-database mirror | BSD-3-Clause terms in repository `LICENSE`; mirror tracks Bluetooth assigned-number metadata | DATA_ONLY | allowed with notice |
 | `ieee_oui` | IEEE public OUI registry | LicenseRef-IEEE-OUI-Terms | DATA_ONLY | review-required |
-| `bluetooth_sig_assigned` | Bluetooth SIG Assigned Numbers | LicenseRef-Bluetooth-SIG-Terms | DATA_ONLY | review-required |
+| `bluetooth_sig_assigned` | Bluetooth SIG official Assigned Numbers publication | LicenseRef-Bluetooth-SIG-Terms | DATA_ONLY | review-required as a direct bulk source |
 | `matter_ids` | Matter / CSA assigned vendor-product metadata | LicenseRef-CSA-Terms | DATA_ONLY | review-required |
 | `esphome_devices` | ESPHome Devices catalog | GPL-3.0-or-later repository content; dataset redistribution requires project policy | DATA_ONLY enrichment | reference-only by default |
 | `theengs_decoder` | Theengs Decoder | GPL-3.0-family project | DATA+PARSER | reference-only by default |
+
+The Nordic mirror is intentionally tracked separately from the official Bluetooth SIG source: the generated artifact cites the redistributable mirror revision and license rather than treating publication on the SIG website as an automatic redistribution grant.
 
 This is an engineering inventory, not legal advice. Any `review-required` source must be cleared before its bulk data is shipped in a NearBy release image.
