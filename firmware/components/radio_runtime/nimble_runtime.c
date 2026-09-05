@@ -1,6 +1,8 @@
 #include "radio_runtime.h"
 #include "radio_runtime_internal.h"
 
+#include <limits.h>
+
 #include "freertos/semphr.h"
 #include "host/ble_gap.h"
 #include "host/ble_hs.h"
@@ -106,14 +108,44 @@ esp_err_t nearby_nimble_scan_start(uint32_t duration_ms, bool passive)
     if (scan_session_require_scan_owner() != ESP_OK) return ESP_ERR_INVALID_STATE;
     if (!s_ready || s_scanning) return ESP_ERR_INVALID_STATE;
 
+    int rc;
+#if MYNEWT_VAL(BLE_EXT_ADV)
+    /*
+     * Extended discovery duration is in 10 ms units and uint16_t. A zero
+     * duration means scan continuously until nearby_nimble_scan_stop().
+     * Scan both uncoded and coded PHYs; B receives native EXT_DISC records and
+     * decides how to interpret them. D does not reassemble chained reports.
+     */
+    uint16_t duration_units = 0;
+    if (duration_ms != 0) {
+        const uint32_t rounded_units = (duration_ms + 9U) / 10U;
+        if (rounded_units > UINT16_MAX) return ESP_ERR_INVALID_ARG;
+        duration_units = (uint16_t)rounded_units;
+    }
+
+    struct ble_gap_ext_disc_params params = {0};
+    params.passive = passive ? 1 : 0;
+
+    rc = ble_gap_ext_disc(s_own_addr_type,
+                          duration_units,
+                          0,
+                          0,
+                          0,
+                          0,
+                          &params,
+                          &params,
+                          nearby_nimble_runtime_gap_event,
+                          NULL);
+#else
     struct ble_gap_disc_params params = {0};
     params.passive = passive ? 1 : 0;
     params.filter_duplicates = 0;
     params.filter_policy = 0;
     params.limited = 0;
 
-    int rc = ble_gap_disc(s_own_addr_type, duration_ms, &params,
-                          nearby_nimble_runtime_gap_event, NULL);
+    rc = ble_gap_disc(s_own_addr_type, (int32_t)duration_ms, &params,
+                      nearby_nimble_runtime_gap_event, NULL);
+#endif
     if (rc != 0) return ESP_FAIL;
     s_scanning = true;
     return ESP_OK;
