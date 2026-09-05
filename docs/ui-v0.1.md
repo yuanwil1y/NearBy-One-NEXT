@@ -16,9 +16,11 @@ Screen hierarchy:
 
 The Nearby card deliberately renders only an icon and Device display name. Entity values, RSSI, manufacturer/model, protocol and transport details are not shown there.
 
+Detail and Settings are transient screen trees. Returning Home loads the persistent Home screen first and schedules the transient screen for LVGL async deletion, so those object trees do not remain resident in ESP32-C6 RAM after navigation.
+
 ## Scan contract
 
-Boot is always `IDLE`; `nearby_ui_init()` never starts a scan.
+Boot is always `IDLE` with an **empty Device list**; `nearby_ui_init()` never seeds mock Devices and never starts a scan.
 
 Production integration should call:
 
@@ -33,7 +35,7 @@ nearby_ui_scan_end();                  // after the complete pass ends
 
 `nearby_ui_scan_module_complete()` is the only production API that advances progress. There is no wall-clock progress calculation in the production path.
 
-If no `scan_requested` callback is registered, the Scan button uses `nearby_ui_mock_start_scan()`. Its timer is only a bring-up harness: each tick emits one synthetic module-complete event and inserts one mock Device. Replace that callback path with Agent B/D events on hardware.
+If no `scan_requested` callback is registered, the Scan button uses `nearby_ui_mock_start_scan()`. Each mock pass first clears the previous Device results, then its timer emits one synthetic module-complete event and inserts one fresh mock Device per tick. Mock results therefore appear only after an explicit Scan action. Replace that callback path with Agent B/D events on hardware.
 
 The UI blocker is intentionally only a UX guard. Agent B/D still own the lower-level exclusive scan/radio-operation lock.
 
@@ -53,8 +55,8 @@ Do not add protocol-specific fields to `nearby_ui_device_t`. Entity data should 
 `web-portal/index.html` is a single-file, mobile-first prototype with no external assets and exactly two primary tabs:
 
 - **Wi-Fi** — mock nearby-network selection, manual SSID fallback, password entry, one Connect/Save action, progress and result state.
-- **Database** — file picker, destructive SD/database replacement warning, explicit confirmation, import progress, validation result, and mock database metadata.
+- **Database** — file picker, explicit warning that import formats the **entire SD card and deletes all contents**, destructive confirmation, import progress, validation result, and mock database metadata.
 
-The Database prototype deliberately does not read the selected file into JavaScript memory. The intended backend flow is two-phase/streaming: validate enough header metadata to decide whether the file is acceptable, prepare/reinitialize SD if required, then stream the payload to final storage and validate it. Agent C defines the accepted file/header/checksum/signature rules; Agent D defines HTTP/SoftAP transport and Wi-Fi plumbing.
+The Database prototype deliberately does not read the selected file into JavaScript memory. The intended backend flow is two-phase/streaming: validate enough header metadata to decide whether the file is acceptable, format/reinitialize the entire SD card, then stream the payload to final storage and validate it. Agent C defines the accepted file/header/checksum/signature rules; Agent D defines HTTP/SoftAP transport and Wi-Fi plumbing.
 
 No backend endpoint names are assumed in this branch.
