@@ -186,9 +186,20 @@ Normal users see real-world Device names/icons on the Nearby screen and meaningf
 
 The product is a portable, transient nearby-device browser/controller, not a fixed-home dashboard. Therefore do not implement Home Assistant features whose value depends on a stable environment, including Automations, Scenes, Areas/Rooms, persistent dashboards, history, long-term statistics, favorites, or saved device organization.
 
+## Start immediately: first deliverables
+
+Do not wait for A/B/C/D before building the first UI pass. Use mock data and stub callbacks.
+
+1. Implement the 170x320 Home screen with compact top bar, Home Assistant-inspired blue/white styling, rounded white cards and vertical scrolling.
+2. Implement IDLE and SCANNING mock states: no auto-scan on boot, thin real-step-style progress bar, full-screen transparent touch blocker while scanning, and dynamic insertion of mock Device cards.
+3. Implement one generic Device detail screen using mock HA-style `sensor`, `binary_sensor`, `switch`, `light`, and `button` Entities.
+4. Implement minimal Settings: Web Management button, database version/status, firmware version.
+5. Build a static/mobile-first Web Portal prototype with `Wi-Fi` and `Database` tabs using stub data only; do not guess D/C backend APIs.
+6. Keep UI code independent from scanner/vendor/protocol details and keep reusable widget code minimal.
+
 ## Current phase
 
-The v0.1 screen hierarchy is now constrained to:
+The v0.1 screen hierarchy is constrained to:
 
 1. one single-column scrollable Nearby Device-card screen using mock data;
 2. one vertically scrollable generic Device detail screen that renders mock Entity/State data;
