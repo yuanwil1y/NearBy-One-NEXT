@@ -23,24 +23,461 @@
   },
   "db": {
     "blocked_nonredistributable_source_count": 0,
-    "bytes": 3430163,
+    "bytes": 3443250,
     "conflict_count": 8,
-    "conflict_keys_sample": [
-      "zigbee:_TZE200_wfxuhoea\u001fTS0601",
-      "zigbee:fingerprint:AVATTO\u001fTS0601",
-      "zigbee:fingerprint:Paulmann Licht GmbH\u001fCCT",
-      "zigbee:fingerprint:Paulmann Licht GmbH\u001fRGBW",
-      "zigbee:fingerprint:Paulmann Licht GmbH\u001fRGBWW",
-      "zigbee:fingerprint:THALEOS\u001fTS0601",
-      "zigbee:fingerprint:_TZ3000_abrsvsou\u001fTS004F",
-      "zigbee:model:\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
+    "conflict_ledger": [
+      {
+        "candidate_count": 2,
+        "candidates": [
+          {
+            "classification": "DATA+PARSER",
+            "key": "zigbee:_TZE200_wfxuhoea\u001fTS0601",
+            "manufacturer": "_TZE200_wfxuhoea",
+            "model": "TS0601",
+            "parser_id": "zha_quirk_optional",
+            "record_type": "zha_manufacturer_model",
+            "source_id": "zha_quirks",
+            "source_path": "tuya/ts0601_garage.py",
+            "source_revision": "6a3822c1348f9e40ad243eb881084a1c075da277"
+          },
+          {
+            "classification": "DATA+PARSER",
+            "key": "zigbee:_TZE200_wfxuhoea\u001fTS0601",
+            "manufacturer": "_TZE200_wfxuhoea",
+            "model": "TS0601",
+            "parser_id": "zha_quirk_optional",
+            "record_type": "zha_manufacturer_model",
+            "source_id": "zha_quirks",
+            "source_path": "tuya/ts0601_switch.py",
+            "source_revision": "6a3822c1348f9e40ad243eb881084a1c075da277"
+          }
+        ],
+        "key": "zigbee:_TZE200_wfxuhoea\u001fTS0601",
+        "manual_review": true,
+        "sources": [
+          "zha_quirks"
+        ],
+        "winner": {
+          "classification": "DATA+PARSER",
+          "key": "zigbee:_TZE200_wfxuhoea\u001fTS0601",
+          "manufacturer": "_TZE200_wfxuhoea",
+          "model": "TS0601",
+          "parser_id": "zha_quirk_optional",
+          "record_type": "zha_manufacturer_model",
+          "source_id": "zha_quirks",
+          "source_path": "tuya/ts0601_garage.py",
+          "source_revision": "6a3822c1348f9e40ad243eb881084a1c075da277"
+        },
+        "winner_reason": "deterministic canonical-JSON lexical tiebreak; no semantic merge; manual review required"
+      },
+      {
+        "candidate_count": 2,
+        "candidates": [
+          {
+            "classification": "DATA_ONLY",
+            "description": "Thermostatic radiator valve",
+            "fingerprint_kind": "tuya_helper_literal_args",
+            "key": "zigbee:fingerprint:AVATTO\u001fTS0601",
+            "manufacturer": "AVATTO",
+            "model": "TS0601",
+            "product_model": "ME167",
+            "record_type": "z2m_fingerprint",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "tuya.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "AVATTO"
+          },
+          {
+            "classification": "DATA_ONLY",
+            "description": "Thermostatic radiator valve",
+            "fingerprint_kind": "tuya_helper_literal_args",
+            "key": "zigbee:fingerprint:AVATTO\u001fTS0601",
+            "manufacturer": "AVATTO",
+            "model": "TS0601",
+            "product_model": "ME167_1",
+            "record_type": "z2m_fingerprint",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "tuya.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "AVATTO"
+          }
+        ],
+        "key": "zigbee:fingerprint:AVATTO\u001fTS0601",
+        "manual_review": true,
+        "sources": [
+          "z2m_converters"
+        ],
+        "winner": {
+          "classification": "DATA_ONLY",
+          "description": "Thermostatic radiator valve",
+          "fingerprint_kind": "tuya_helper_literal_args",
+          "key": "zigbee:fingerprint:AVATTO\u001fTS0601",
+          "manufacturer": "AVATTO",
+          "model": "TS0601",
+          "product_model": "ME167",
+          "record_type": "z2m_fingerprint",
+          "source_classification": "DATA+PARSER",
+          "source_id": "z2m_converters",
+          "source_path": "tuya.ts",
+          "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+          "vendor": "AVATTO"
+        },
+        "winner_reason": "deterministic canonical-JSON lexical tiebreak; no semantic merge; manual review required"
+      },
+      {
+        "candidate_count": 2,
+        "candidates": [
+          {
+            "classification": "DATA_ONLY",
+            "description": "SmartHome Zigbee MaxLED tunable white controller max. 144W / 24V DC",
+            "fingerprint_kind": "literal",
+            "key": "zigbee:fingerprint:Paulmann Licht GmbH\u001fCCT",
+            "manufacturer": "Paulmann Licht GmbH",
+            "model": "CCT",
+            "product_model": "500.46",
+            "record_type": "z2m_fingerprint",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "paulmann.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "Paulmann"
+          },
+          {
+            "classification": "DATA_ONLY",
+            "description": "SmartHome led spot",
+            "fingerprint_kind": "literal",
+            "key": "zigbee:fingerprint:Paulmann Licht GmbH\u001fCCT",
+            "manufacturer": "Paulmann Licht GmbH",
+            "model": "CCT",
+            "product_model": "50064",
+            "record_type": "z2m_fingerprint",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "paulmann.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "Paulmann"
+          }
+        ],
+        "key": "zigbee:fingerprint:Paulmann Licht GmbH\u001fCCT",
+        "manual_review": true,
+        "sources": [
+          "z2m_converters"
+        ],
+        "winner": {
+          "classification": "DATA_ONLY",
+          "description": "SmartHome Zigbee MaxLED tunable white controller max. 144W / 24V DC",
+          "fingerprint_kind": "literal",
+          "key": "zigbee:fingerprint:Paulmann Licht GmbH\u001fCCT",
+          "manufacturer": "Paulmann Licht GmbH",
+          "model": "CCT",
+          "product_model": "500.46",
+          "record_type": "z2m_fingerprint",
+          "source_classification": "DATA+PARSER",
+          "source_id": "z2m_converters",
+          "source_path": "paulmann.ts",
+          "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+          "vendor": "Paulmann"
+        },
+        "winner_reason": "deterministic canonical-JSON lexical tiebreak; no semantic merge; manual review required"
+      },
+      {
+        "candidate_count": 3,
+        "candidates": [
+          {
+            "classification": "DATA_ONLY",
+            "description": "LED RGBW+ Module Recessed Light Zigbee Base Coin Single",
+            "fingerprint_kind": "literal",
+            "key": "zigbee:fingerprint:Paulmann Licht GmbH\u001fRGBW",
+            "manufacturer": "Paulmann Licht GmbH",
+            "model": "RGBW",
+            "product_model": "924.70",
+            "record_type": "z2m_fingerprint",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "paulmann.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "Paulmann"
+          },
+          {
+            "classification": "DATA_ONLY",
+            "description": "RGBW light",
+            "fingerprint_kind": "literal",
+            "key": "zigbee:fingerprint:Paulmann Licht GmbH\u001fRGBW",
+            "manufacturer": "Paulmann Licht GmbH",
+            "model": "RGBW",
+            "product_model": "948.47/29165",
+            "record_type": "z2m_fingerprint",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "paulmann.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "Paulmann"
+          },
+          {
+            "classification": "DATA_ONLY",
+            "description": "SmartHome Zigbee MaxLED RGBW controller",
+            "fingerprint_kind": "literal",
+            "key": "zigbee:fingerprint:Paulmann Licht GmbH\u001fRGBW",
+            "manufacturer": "Paulmann Licht GmbH",
+            "model": "RGBW",
+            "product_model": "500.47",
+            "record_type": "z2m_fingerprint",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "paulmann.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "Paulmann"
+          }
+        ],
+        "key": "zigbee:fingerprint:Paulmann Licht GmbH\u001fRGBW",
+        "manual_review": true,
+        "sources": [
+          "z2m_converters"
+        ],
+        "winner": {
+          "classification": "DATA_ONLY",
+          "description": "LED RGBW+ Module Recessed Light Zigbee Base Coin Single",
+          "fingerprint_kind": "literal",
+          "key": "zigbee:fingerprint:Paulmann Licht GmbH\u001fRGBW",
+          "manufacturer": "Paulmann Licht GmbH",
+          "model": "RGBW",
+          "product_model": "924.70",
+          "record_type": "z2m_fingerprint",
+          "source_classification": "DATA+PARSER",
+          "source_id": "z2m_converters",
+          "source_path": "paulmann.ts",
+          "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+          "vendor": "Paulmann"
+        },
+        "winner_reason": "deterministic canonical-JSON lexical tiebreak; no semantic merge; manual review required"
+      },
+      {
+        "candidate_count": 2,
+        "candidates": [
+          {
+            "classification": "DATA_ONLY",
+            "description": "Smart Home Zigbee LED Reflector GU10 4.8W RGBWW",
+            "fingerprint_kind": "literal",
+            "key": "zigbee:fingerprint:Paulmann Licht GmbH\u001fRGBWW",
+            "manufacturer": "Paulmann Licht GmbH",
+            "model": "RGBWW",
+            "product_model": "291.48",
+            "record_type": "z2m_fingerprint",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "paulmann.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "Paulmann"
+          },
+          {
+            "classification": "DATA_ONLY",
+            "description": "Smart Home Zigbee LED bulb 4.9W Matt E14 RGBWW",
+            "fingerprint_kind": "literal",
+            "key": "zigbee:fingerprint:Paulmann Licht GmbH\u001fRGBWW",
+            "manufacturer": "Paulmann Licht GmbH",
+            "model": "RGBWW",
+            "product_model": "291.46",
+            "record_type": "z2m_fingerprint",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "paulmann.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "Paulmann"
+          }
+        ],
+        "key": "zigbee:fingerprint:Paulmann Licht GmbH\u001fRGBWW",
+        "manual_review": true,
+        "sources": [
+          "z2m_converters"
+        ],
+        "winner": {
+          "classification": "DATA_ONLY",
+          "description": "Smart Home Zigbee LED Reflector GU10 4.8W RGBWW",
+          "fingerprint_kind": "literal",
+          "key": "zigbee:fingerprint:Paulmann Licht GmbH\u001fRGBWW",
+          "manufacturer": "Paulmann Licht GmbH",
+          "model": "RGBWW",
+          "product_model": "291.48",
+          "record_type": "z2m_fingerprint",
+          "source_classification": "DATA+PARSER",
+          "source_id": "z2m_converters",
+          "source_path": "paulmann.ts",
+          "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+          "vendor": "Paulmann"
+        },
+        "winner_reason": "deterministic canonical-JSON lexical tiebreak; no semantic merge; manual review required"
+      },
+      {
+        "candidate_count": 2,
+        "candidates": [
+          {
+            "classification": "DATA_ONLY",
+            "description": "Radiator valve with thermostat",
+            "fingerprint_kind": "tuya_helper_literal_args",
+            "key": "zigbee:fingerprint:THALEOS\u001fTS0601",
+            "manufacturer": "THALEOS",
+            "model": "TS0601",
+            "product_model": "07732L",
+            "record_type": "z2m_fingerprint",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "tuya.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "Immax"
+          },
+          {
+            "classification": "DATA_ONLY",
+            "description": "Thermostatic radiator valve",
+            "fingerprint_kind": "tuya_helper_literal_args",
+            "key": "zigbee:fingerprint:THALEOS\u001fTS0601",
+            "manufacturer": "THALEOS",
+            "model": "TS0601",
+            "product_model": "ME167",
+            "record_type": "z2m_fingerprint",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "tuya.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "AVATTO"
+          }
+        ],
+        "key": "zigbee:fingerprint:THALEOS\u001fTS0601",
+        "manual_review": true,
+        "sources": [
+          "z2m_converters"
+        ],
+        "winner": {
+          "classification": "DATA_ONLY",
+          "description": "Radiator valve with thermostat",
+          "fingerprint_kind": "tuya_helper_literal_args",
+          "key": "zigbee:fingerprint:THALEOS\u001fTS0601",
+          "manufacturer": "THALEOS",
+          "model": "TS0601",
+          "product_model": "07732L",
+          "record_type": "z2m_fingerprint",
+          "source_classification": "DATA+PARSER",
+          "source_id": "z2m_converters",
+          "source_path": "tuya.ts",
+          "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+          "vendor": "Immax"
+        },
+        "winner_reason": "deterministic canonical-JSON lexical tiebreak; no semantic merge; manual review required"
+      },
+      {
+        "candidate_count": 2,
+        "candidates": [
+          {
+            "classification": "DATA_ONLY",
+            "description": "Smart knob",
+            "fingerprint_kind": "literal",
+            "key": "zigbee:fingerprint:_TZ3000_abrsvsou\u001fTS004F",
+            "manufacturer": "_TZ3000_abrsvsou",
+            "model": "TS004F",
+            "product_model": "ZG-101Z/D",
+            "record_type": "z2m_fingerprint",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "tuya.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "Tuya"
+          },
+          {
+            "classification": "DATA_ONLY",
+            "description": "Smart knob",
+            "fingerprint_kind": "tuya_helper_literal_args",
+            "key": "zigbee:fingerprint:_TZ3000_abrsvsou\u001fTS004F",
+            "manufacturer": "_TZ3000_abrsvsou",
+            "model": "TS004F",
+            "product_model": "ERS-10TZBVK-AA",
+            "record_type": "z2m_fingerprint",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "tuya.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "Tuya"
+          }
+        ],
+        "key": "zigbee:fingerprint:_TZ3000_abrsvsou\u001fTS004F",
+        "manual_review": true,
+        "sources": [
+          "z2m_converters"
+        ],
+        "winner": {
+          "classification": "DATA_ONLY",
+          "description": "Smart knob",
+          "fingerprint_kind": "literal",
+          "key": "zigbee:fingerprint:_TZ3000_abrsvsou\u001fTS004F",
+          "manufacturer": "_TZ3000_abrsvsou",
+          "model": "TS004F",
+          "product_model": "ZG-101Z/D",
+          "record_type": "z2m_fingerprint",
+          "source_classification": "DATA+PARSER",
+          "source_id": "z2m_converters",
+          "source_path": "tuya.ts",
+          "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+          "vendor": "Tuya"
+        },
+        "winner_reason": "deterministic canonical-JSON lexical tiebreak; no semantic merge; manual review required"
+      },
+      {
+        "candidate_count": 2,
+        "candidates": [
+          {
+            "classification": "DATA_ONLY",
+            "description": "DIN contactor module",
+            "key": "zigbee:model:\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+            "product_model": "412171",
+            "record_type": "z2m_zigbee_model",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "legrand.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "Legrand",
+            "zigbee_model": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
+          },
+          {
+            "classification": "DATA_ONLY",
+            "description": "DIN smart relay for light control",
+            "key": "zigbee:model:\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+            "product_model": "412170",
+            "record_type": "z2m_zigbee_model",
+            "source_classification": "DATA+PARSER",
+            "source_id": "z2m_converters",
+            "source_path": "legrand.ts",
+            "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+            "vendor": "Legrand",
+            "zigbee_model": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
+          }
+        ],
+        "key": "zigbee:model:\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+        "manual_review": true,
+        "sources": [
+          "z2m_converters"
+        ],
+        "winner": {
+          "classification": "DATA_ONLY",
+          "description": "DIN contactor module",
+          "key": "zigbee:model:\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+          "product_model": "412171",
+          "record_type": "z2m_zigbee_model",
+          "source_classification": "DATA+PARSER",
+          "source_id": "z2m_converters",
+          "source_path": "legrand.ts",
+          "source_revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+          "vendor": "Legrand",
+          "zigbee_model": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
+        },
+        "winner_reason": "deterministic canonical-JSON lexical tiebreak; no semantic merge; manual review required"
+      }
     ],
     "normalized_unique_key_count": 8617,
     "parser_required_count": 678,
     "path": "artifacts/pinned/nearby.nbdb",
     "raw_record_count": 8626,
     "record_count": 8617,
-    "sha256": "9db217f283bf2d72f121ab83432cbdee8c620c423455fe4fbaaa6d10f043f80a"
+    "sha256": "faae4e6e136dac60810bfb8fcc9e518ae21a0f263d4969da8a1d533e77cccd40"
   },
   "extraction": {
     "raw_records_by_extractor": {
@@ -63,7 +500,7 @@
   },
   "generator": {
     "name": "full_dbgen.py",
-    "version": 1
+    "version": 2
   },
   "pins": {
     "build_epoch": 1788634001,
@@ -95,7 +532,7 @@
     "errors": [],
     "ok": true
   },
-  "report_schema": 2,
+  "report_schema": 3,
   "representative_lookups": [
     {
       "hit": true,
@@ -135,7 +572,7 @@
   ],
   "scope": "full pinned HA generated Bluetooth/Zeroconf/SSDP/DHCP + full pinned ZHA + static pinned Z2M identity extraction",
   "timing_ms": {
-    "build": 1516.677,
-    "release_validation": 3.296
+    "build": 2604.633,
+    "release_validation": 4.635
   }
 }
