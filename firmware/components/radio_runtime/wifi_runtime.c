@@ -14,10 +14,7 @@ static esp_netif_t *s_sta_netif;
 
 static esp_err_t require_radio_access(void)
 {
-    if (scan_session_require_scan_owner() == ESP_OK ||
-        scan_session_require_competing_active() == ESP_OK) {
-        return ESP_OK;
-    }
+    if (scan_session_require_scan_owner() == ESP_OK || scan_session_require_competing_active() == ESP_OK) return ESP_OK;
     return ESP_ERR_INVALID_STATE;
 }
 
@@ -43,7 +40,6 @@ esp_err_t nearby_wifi_driver_init(void)
 
     esp_err_t err = nearby_radio_phase_claim(NEARBY_RADIO_PHASE_WIFI);
     if (err != ESP_OK) return err;
-
     err = nearby_wifi_handoff_init();
     if (err != ESP_OK) goto fail_phase;
     err = esp_netif_init();
@@ -79,43 +75,36 @@ esp_err_t nearby_wifi_driver_init(void)
     return ESP_OK;
 
 fail_driver:
-    (void)esp_wifi_deinit();
-    s_wifi_initialized = false;
-    destroy_sta_netif();
+    if (esp_wifi_deinit() == ESP_OK) {
+        s_wifi_initialized = false;
+        destroy_sta_netif();
+        release_wifi_phase_if_owned();
+    }
+    return err;
 fail_phase:
     release_wifi_phase_if_owned();
     return err;
 }
 
-static esp_err_t perform_active_scan(wifi_ap_record_t *records,
-                                     uint16_t *inout_count,
-                                     bool show_hidden)
+static esp_err_t perform_active_scan(wifi_ap_record_t *records, uint16_t *inout_count, bool show_hidden)
 {
     if (records == NULL || inout_count == NULL || *inout_count == 0) return ESP_ERR_INVALID_ARG;
     esp_err_t err = nearby_wifi_driver_init();
     if (err != ESP_OK) return err;
     if (s_wifi_promiscuous) return ESP_ERR_INVALID_STATE;
-
-    wifi_scan_config_t scan_cfg = {
-        .show_hidden = show_hidden,
-        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
-    };
+    wifi_scan_config_t scan_cfg = {.show_hidden = show_hidden, .scan_type = WIFI_SCAN_TYPE_ACTIVE};
     err = esp_wifi_scan_start(&scan_cfg, true);
     if (err != ESP_OK) return err;
     return esp_wifi_scan_get_ap_records(inout_count, records);
 }
 
-esp_err_t nearby_wifi_active_scan(wifi_ap_record_t *records,
-                                  uint16_t *inout_count,
-                                  bool show_hidden)
+esp_err_t nearby_wifi_active_scan(wifi_ap_record_t *records, uint16_t *inout_count, bool show_hidden)
 {
     if (scan_session_require_scan_owner() != ESP_OK) return ESP_ERR_INVALID_STATE;
     return perform_active_scan(records, inout_count, show_hidden);
 }
 
-esp_err_t nearby_wifi_portal_scan(wifi_ap_record_t *records,
-                                  uint16_t *inout_count,
-                                  bool show_hidden)
+esp_err_t nearby_wifi_portal_scan(wifi_ap_record_t *records, uint16_t *inout_count, bool show_hidden)
 {
     if (scan_session_require_competing_active() != ESP_OK) return ESP_ERR_INVALID_STATE;
     return perform_active_scan(records, inout_count, show_hidden);
@@ -125,15 +114,12 @@ esp_err_t nearby_wifi_promiscuous_start(uint8_t channel, uint32_t filter_mask)
 {
     if (scan_session_require_scan_owner() != ESP_OK) return ESP_ERR_INVALID_STATE;
     if (channel < 1 || channel > 14) return ESP_ERR_INVALID_ARG;
-
     esp_err_t err = nearby_wifi_driver_init();
     if (err != ESP_OK) return err;
     if (s_wifi_promiscuous) return ESP_ERR_INVALID_STATE;
 
-    wifi_promiscuous_filter_t filter = {
-        .filter_mask = filter_mask != 0 ? filter_mask :
-            (WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_CTRL | WIFI_PROMIS_FILTER_MASK_DATA),
-    };
+    wifi_promiscuous_filter_t filter = {.filter_mask = filter_mask != 0 ? filter_mask :
+        (WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_CTRL | WIFI_PROMIS_FILTER_MASK_DATA)};
     err = esp_wifi_set_promiscuous(false);
     if (err != ESP_OK) return err;
     err = esp_wifi_set_promiscuous_filter(&filter);
@@ -144,7 +130,6 @@ esp_err_t nearby_wifi_promiscuous_start(uint8_t channel, uint32_t filter_mask)
     if (err != ESP_OK) return err;
     err = esp_wifi_set_promiscuous(true);
     if (err != ESP_OK) return err;
-
     s_wifi_promiscuous = true;
     return ESP_OK;
 }
@@ -207,27 +192,20 @@ esp_err_t nearby_wifi_driver_deinit(void)
     }
 
     esp_err_t first_err = nearby_wifi_promiscuous_stop();
-    esp_err_t err = esp_wifi_stop();
-    if (first_err == ESP_OK && err != ESP_OK && err != ESP_ERR_WIFI_NOT_STARTED) first_err = err;
-    s_wifi_started = false;
+    esp_err_t stop_err = esp_wifi_stop();
+    if (first_err == ESP_OK && stop_err != ESP_OK && stop_err != ESP_ERR_WIFI_NOT_STARTED) first_err = stop_err;
+    if (stop_err == ESP_OK || stop_err == ESP_ERR_WIFI_NOT_STARTED) s_wifi_started = false;
 
-    err = esp_wifi_deinit();
-    if (first_err == ESP_OK && err != ESP_OK) first_err = err;
+    esp_err_t deinit_err = esp_wifi_deinit();
+    if (deinit_err != ESP_OK) return first_err != ESP_OK ? first_err : deinit_err;
+
     s_wifi_initialized = false;
+    s_wifi_started = false;
     s_wifi_promiscuous = false;
     destroy_sta_netif();
-
-    err = nearby_radio_phase_release(NEARBY_RADIO_PHASE_WIFI);
-    if (first_err == ESP_OK && err != ESP_OK) first_err = err;
-    return first_err;
+    esp_err_t phase_err = nearby_radio_phase_release(NEARBY_RADIO_PHASE_WIFI);
+    return first_err != ESP_OK ? first_err : phase_err;
 }
 
-bool nearby_wifi_driver_is_started(void)
-{
-    return s_wifi_started;
-}
-
-esp_netif_t *nearby_wifi_sta_netif(void)
-{
-    return s_sta_netif;
-}
+bool nearby_wifi_driver_is_started(void) { return s_wifi_started; }
+esp_netif_t *nearby_wifi_sta_netif(void) { return s_sta_netif; }
