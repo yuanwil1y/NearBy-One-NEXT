@@ -30,7 +30,8 @@ typedef struct {
 
 /*
  * Create the 170x320 UI on the active LVGL screen.
- * Boot is always IDLE; this function never starts a scan.
+ * Boot is always IDLE with an empty Device list; this function never seeds
+ * mock results and never starts a scan.
  */
 void nearby_ui_init(const nearby_ui_callbacks_t *callbacks);
 
@@ -52,9 +53,11 @@ void nearby_ui_set_portal_info(bool running,
                                const char *pin);
 
 /*
- * Mock/demo helpers for Agent E bring-up. The mock timer emits synthetic
- * module-completion events; production integrations should call the scan event
- * functions above from Agent B/D completion notifications instead.
+ * Mock/demo helpers for Agent E bring-up. nearby_ui_mock_start_scan() clears
+ * the previous mock pass, then emits synthetic module-completion events so
+ * mock Device results appear only after an explicit Scan action.
+ * Production integrations should call the scan event functions above from
+ * Agent B/D completion notifications instead.
  */
 void nearby_ui_mock_seed_devices(void);
 void nearby_ui_mock_start_scan(void);
