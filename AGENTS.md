@@ -15,7 +15,7 @@ Build the NearBy One NEXT user interface for the Waveshare ESP32-C6-Touch-LCD-1.
 - Prefer copying/adapting existing LVGL examples and Home Assistant interaction patterns over writing new UI frameworks.
 - Optimize for ESP32-C6 RAM/Flash limits: flat widgets, small object trees, limited animation, minimal dynamic allocation, no heavy shadow/blur effects.
 - Runtime is session-only. Every boot is a new environment. Do not implement persistent devices, favorites, rooms, dashboards, history, automations, scenes, user layouts, or per-device configuration storage.
-- The only persistent data in the product architecture is the read-only recognition/matching database owned by Agent C; Agent E does not own or modify it.
+- The only persistent product data is the read-only recognition/matching database owned by Agent C, plus minimal device-local configuration needed for networking or UI operation.
 
 ## Screen model
 
@@ -86,6 +86,60 @@ Examples:
 
 Manufacturer/model may be shown in the Device detail header if available, but are not required on the Nearby card.
 
+### Settings
+
+Settings exists for device-local setup only; it is **not** a Home Assistant-style configuration center.
+
+At minimum provide an entry named along the lines of `Setup Portal` / `配网与数据库`.
+
+Because the physical screen is too small for comfortable text entry or file selection, **do not implement an on-device software keyboard for Wi-Fi credentials and do not implement database file selection on the LCD**.
+
+Opening Setup Portal should ask the lower hardware/network layer to start a temporary SoftAP + local Web Portal, then show only the connection instructions needed by the user, for example:
+
+```text
+Setup Portal
+
+Connect your phone to:
+NearBy-One-XXXX
+
+Then open:
+192.168.4.1
+
+[ Stop Portal ]
+```
+
+If the networking layer exposes a temporary AP password/PIN, display it here as well. The on-device UI should clearly show portal running/stopped/success/error state but should not duplicate the browser forms.
+
+## Web Portal UX contract
+
+Agent E owns the **visual/interaction design** of the setup portal. Agent D owns SoftAP, HTTP server, Wi-Fi scan/connection plumbing and transport. Agent C owns recognition-database format validation and SD database import semantics.
+
+The portal should be mobile-first and contain exactly two primary sections/tabs for v0.1:
+
+### 1. Wi-Fi
+
+- show nearby scanned Wi-Fi networks as a selectable list;
+- show SSID and useful signal indication;
+- allow manual SSID entry as a fallback if needed;
+- after choosing a network, provide a password field;
+- provide a single clear Connect/Save action;
+- show progress and success/failure in the browser;
+- after successful provisioning, the device may stop the setup SoftAP according to Agent D's networking lifecycle.
+
+Do not expose low-level Wi-Fi driver terminology to the user.
+
+### 2. Database
+
+- provide a browser file picker for the NearBy recognition database file;
+- clearly state that importing a database will replace the SD-card database and may format/reinitialize the SD card;
+- require an explicit destructive confirmation before formatting/replacing database contents;
+- show upload/import progress and validation result;
+- after successful import, show database version/build metadata if Agent C provides it.
+
+The browser workflow should be designed so that the device can format/reinitialize the SD card **before the actual database payload is streamed to its final location**, avoiding any design that assumes the full uploaded database can be buffered in ESP32 RAM or internal flash.
+
+Do not let Agent E invent the database binary format. Agent C defines accepted file structure, header/version/checksum/signature rules, and import success criteria.
+
 ## Product UX rule
 
 Normal users see real-world Device names/icons on the Nearby screen and meaningful Entity controls only after opening a Device. Protocol/transport details stay out of the normal UI.
@@ -97,6 +151,8 @@ The product is a portable, transient nearby-device browser/controller, not a fix
 The v0.1 screen hierarchy is now constrained to:
 
 1. one single-column scrollable Nearby Device-card screen using mock data;
-2. one vertically scrollable generic Device detail screen that renders mock Entity/State data.
+2. one vertically scrollable generic Device detail screen that renders mock Entity/State data;
+3. one minimal Settings screen with Setup Portal entry/status;
+4. one mobile-first Web Setup Portal with Wi-Fi and Database sections.
 
-Do not add additional primary navigation or dashboard concepts until these two screens work well on the real 170x320 touch panel.
+Do not add additional primary navigation or dashboard concepts until these flows work well on the real 170x320 touch panel.
