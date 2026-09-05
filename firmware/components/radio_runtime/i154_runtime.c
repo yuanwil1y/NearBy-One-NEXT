@@ -7,11 +7,19 @@
 
 static bool s_i154_active;
 
-static void release_i154_phase_if_owned(void)
+static void latch_scan_fatal(esp_err_t reason)
+{
+    if (reason != ESP_OK) {
+        (void)scan_session_mark_fatal(reason);
+    }
+}
+
+static esp_err_t release_i154_phase_if_owned(void)
 {
     if (nearby_radio_phase_current() == NEARBY_RADIO_PHASE_I154) {
-        (void)nearby_radio_phase_release(NEARBY_RADIO_PHASE_I154);
+        return nearby_radio_phase_release(NEARBY_RADIO_PHASE_I154);
     }
+    return ESP_OK;
 }
 
 esp_err_t nearby_i154_receive_start(uint8_t channel)
@@ -42,12 +50,28 @@ esp_err_t nearby_i154_receive_start(uint8_t channel)
     s_i154_active = true;
     return ESP_OK;
 
-fail_disable:
-    if (esp_ieee802154_disable() == ESP_OK) release_i154_phase_if_owned();
-    return err;
-fail_phase:
-    release_i154_phase_if_owned();
-    return err;
+fail_disable: {
+        esp_err_t disable_err = esp_ieee802154_disable();
+        if (disable_err == ESP_OK) {
+            esp_err_t phase_err = release_i154_phase_if_owned();
+            if (phase_err != ESP_OK) {
+                latch_scan_fatal(phase_err);
+                return phase_err;
+            }
+        } else {
+            /* Cannot prove the radio is down; keep the phase and scan gate. */
+            latch_scan_fatal(disable_err);
+        }
+        return err;
+    }
+fail_phase: {
+        esp_err_t phase_err = release_i154_phase_if_owned();
+        if (phase_err != ESP_OK) {
+            latch_scan_fatal(phase_err);
+            return phase_err;
+        }
+        return err;
+    }
 }
 
 esp_err_t nearby_i154_receive_stop(void)
@@ -55,8 +79,9 @@ esp_err_t nearby_i154_receive_stop(void)
     if (scan_session_require_scan_owner() != ESP_OK) return ESP_ERR_INVALID_STATE;
 
     if (!s_i154_active) {
-        release_i154_phase_if_owned();
-        return ESP_OK;
+        esp_err_t phase_err = release_i154_phase_if_owned();
+        if (phase_err != ESP_OK) latch_scan_fatal(phase_err);
+        return phase_err;
     }
 
     esp_err_t first_err = esp_ieee802154_set_promiscuous(false);
@@ -65,11 +90,13 @@ esp_err_t nearby_i154_receive_stop(void)
 
     esp_err_t disable_err = esp_ieee802154_disable();
     if (disable_err != ESP_OK) {
+        latch_scan_fatal(disable_err);
         return first_err != ESP_OK ? first_err : disable_err;
     }
 
     s_i154_active = false;
     esp_err_t phase_err = nearby_radio_phase_release(NEARBY_RADIO_PHASE_I154);
+    if (phase_err != ESP_OK) latch_scan_fatal(phase_err);
     return first_err != ESP_OK ? first_err : phase_err;
 }
 
