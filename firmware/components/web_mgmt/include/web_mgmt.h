@@ -18,6 +18,7 @@ typedef struct {
     char ap_ipv4[16];
     char sta_ipv4[16];
     bool sta_connected;
+    bool db_format_authorized;
 } nearby_web_mgmt_status_t;
 
 /** Register C-owned DB validation hooks used by the raw upload endpoint. */
