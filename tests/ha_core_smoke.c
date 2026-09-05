@@ -1,4 +1,5 @@
 #include "ha_core.h"
+#include "ha_test_fixture.h"
 
 #include <assert.h>
 #include <stdbool.h>
@@ -27,6 +28,7 @@ static bool on_service(const char *entity_id, const char *service,
 
 int main(void) {
     ha_core_reset();
+    const uint32_t reset_revision = ha_core_revision();
     assert(ha_device_count() == 0);
     assert(ha_entity_count() == 0);
     assert(ha_state_count() == 0);
@@ -34,11 +36,11 @@ int main(void) {
     ha_device_t device = {0};
     strcpy(device.id, "device-1");
     strcpy(device.name, "Test device");
-    strcpy(device.config_entry_id, "test-entry");
     device.identifier_count = 1;
     strcpy(device.identifiers[0].domain, "test");
     strcpy(device.identifiers[0].value, "123");
     assert(ha_device_upsert(&device));
+    assert(ha_core_revision() != reset_revision);
     assert(ha_device_get_by_identifier("test", "123") != NULL);
 
     ha_entity_t entity = {0};
@@ -52,6 +54,9 @@ int main(void) {
     entity.service_handler = on_service;
     assert(ha_entity_upsert(&entity));
     assert(ha_entity_get_by_unique_id(HA_DOMAIN_SWITCH, "test", "switch-test-123") != NULL);
+    assert(ha_entity_count_for_device(device.id) == 1);
+    assert(ha_entity_at_for_device(device.id, 0) != NULL);
+    assert(ha_entity_at_for_device(device.id, 1) == NULL);
 
     ha_state_set_listener(on_state, NULL);
     const ha_attribute_t attrs[] = {{.key = "friendly_name", .value = "Test switch"}};
@@ -75,16 +80,18 @@ int main(void) {
     assert(ha_entity_count() == 0);
     assert(ha_state_count() == 0);
 
-    ha_mock_fixtures_load();
+    ha_test_fixture_load();
     assert(ha_device_count() == 2);
     assert(ha_entity_count() == 5);
     assert(ha_state_count() == 5);
-    assert(ha_entity_get("sensor.living_room_temperature") != NULL);
-    assert(ha_entity_get("binary_sensor.living_room_motion") != NULL);
-    assert(ha_entity_get("switch.desk_plug") != NULL);
-    assert(ha_entity_get("light.desk_lamp") != NULL);
-    assert(ha_entity_get("button.desk_identify") != NULL);
-    assert(ha_entity_call_service("button.desk_identify", HA_SERVICE_PRESS, NULL, 0));
+    assert(ha_entity_get("sensor.test_temperature") != NULL);
+    assert(ha_entity_get("binary_sensor.test_motion") != NULL);
+    assert(ha_entity_get("switch.test_plug") != NULL);
+    assert(ha_entity_get("light.test_lamp") != NULL);
+    assert(ha_entity_get("button.test_identify") != NULL);
+    assert(ha_entity_count_for_device("dev-env-1") == 2);
+    assert(ha_entity_count_for_device("dev-control-1") == 3);
+    assert(ha_entity_call_service("button.test_identify", HA_SERVICE_PRESS, NULL, 0));
 
     ha_core_reset();
     assert(ha_device_count() == 0);

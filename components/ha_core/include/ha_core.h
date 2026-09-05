@@ -13,42 +13,56 @@ extern "C" {
  * Field names intentionally follow HA Core where practical.
  *
  * No persistence is performed. ha_core_reset() returns the runtime to boot-empty.
+ * All returned pointers are read-only borrowed views into fixed pools and must not
+ * be cached across a successful mutating call. ha_core_revision() changes when
+ * registry/state contents change.
  */
 
 #ifndef HA_MAX_DEVICES
-#define HA_MAX_DEVICES 24
+#define HA_MAX_DEVICES 8
 #endif
 #ifndef HA_MAX_ENTITIES
-#define HA_MAX_ENTITIES 96
+#define HA_MAX_ENTITIES 32
 #endif
 #ifndef HA_MAX_STATES
 #define HA_MAX_STATES HA_MAX_ENTITIES
 #endif
 #ifndef HA_MAX_ATTRIBUTES
-#define HA_MAX_ATTRIBUTES 8
+#define HA_MAX_ATTRIBUTES 4
 #endif
 #ifndef HA_MAX_IDENTIFIERS
-#define HA_MAX_IDENTIFIERS 4
+#define HA_MAX_IDENTIFIERS 2
 #endif
 #ifndef HA_MAX_CONNECTIONS
-#define HA_MAX_CONNECTIONS 4
+#define HA_MAX_CONNECTIONS 2
 #endif
 
-#define HA_ID_LEN 40
-#define HA_ENTITY_ID_LEN 80
-#define HA_UNIQUE_ID_LEN 80
-#define HA_DOMAIN_LEN 24
-#define HA_PLATFORM_LEN 40
-#define HA_NAME_LEN 64
-#define HA_VALUE_LEN 80
-#define HA_KEY_LEN 40
-#define HA_URL_LEN 96
-#define HA_VERSION_LEN 32
-#define HA_DEVICE_CLASS_LEN 40
-#define HA_ENTITY_CATEGORY_LEN 24
-#define HA_UNIT_LEN 24
-#define HA_ICON_LEN 48
-#define HA_CONNECTION_TYPE_LEN 16
+#define HA_ID_LEN 33
+#define HA_ENTITY_ID_LEN 64
+#define HA_UNIQUE_ID_LEN 64
+#define HA_DOMAIN_LEN 20
+#define HA_PLATFORM_LEN 32
+#define HA_NAME_LEN 48
+#define HA_STATE_LEN 40
+#define HA_ATTRIBUTE_KEY_LEN 24
+#define HA_ATTRIBUTE_VALUE_LEN 40
+#define HA_DEVICE_CLASS_LEN 32
+#define HA_UNIT_LEN 16
+#define HA_ICON_LEN 32
+#define HA_CONNECTION_TYPE_LEN 12
+#define HA_IDENTIFIER_VALUE_LEN 40
+#define HA_CONNECTION_VALUE_LEN 40
+#define HA_SERVICE_LEN 16
+
+#if HA_MAX_ATTRIBUTES > UINT8_MAX
+#error "HA_MAX_ATTRIBUTES must fit in uint8_t"
+#endif
+#if HA_MAX_IDENTIFIERS > UINT8_MAX
+#error "HA_MAX_IDENTIFIERS must fit in uint8_t"
+#endif
+#if HA_MAX_CONNECTIONS > UINT8_MAX
+#error "HA_MAX_CONNECTIONS must fit in uint8_t"
+#endif
 
 #define HA_DOMAIN_SENSOR "sensor"
 #define HA_DOMAIN_BINARY_SENSOR "binary_sensor"
@@ -66,38 +80,30 @@ extern "C" {
 #define HA_STATE_UNKNOWN "unknown"
 
 typedef struct {
-    char key[HA_KEY_LEN];
-    char value[HA_VALUE_LEN];
+    char key[HA_ATTRIBUTE_KEY_LEN];
+    char value[HA_ATTRIBUTE_VALUE_LEN];
 } ha_attribute_t;
 
 typedef struct {
     char domain[HA_DOMAIN_LEN];
-    char value[HA_VALUE_LEN];
+    char value[HA_IDENTIFIER_VALUE_LEN];
 } ha_identifier_t;
 
 typedef struct {
     char type[HA_CONNECTION_TYPE_LEN];
-    char value[HA_VALUE_LEN];
+    char value[HA_CONNECTION_VALUE_LEN];
 } ha_connection_t;
 
 typedef struct {
-    bool in_use;
     char id[HA_ID_LEN];
-    char config_entry_id[HA_ID_LEN];
-    char config_subentry_id[HA_ID_LEN];
     ha_identifier_t identifiers[HA_MAX_IDENTIFIERS];
-    size_t identifier_count;
+    uint8_t identifier_count;
     ha_connection_t connections[HA_MAX_CONNECTIONS];
-    size_t connection_count;
+    uint8_t connection_count;
     char manufacturer[HA_NAME_LEN];
     char model[HA_NAME_LEN];
     char model_id[HA_NAME_LEN];
     char name[HA_NAME_LEN];
-    char serial_number[HA_NAME_LEN];
-    char sw_version[HA_VERSION_LEN];
-    char hw_version[HA_VERSION_LEN];
-    char configuration_url[HA_URL_LEN];
-    char via_device_id[HA_ID_LEN];
 } ha_device_t;
 
 typedef bool (*ha_service_handler_t)(
@@ -108,16 +114,12 @@ typedef bool (*ha_service_handler_t)(
     void *ctx);
 
 typedef struct {
-    bool in_use;
     char entity_id[HA_ENTITY_ID_LEN];
     char unique_id[HA_UNIQUE_ID_LEN];
     char platform[HA_PLATFORM_LEN];
     char domain[HA_DOMAIN_LEN];
     char device_id[HA_ID_LEN];
-    char config_entry_id[HA_ID_LEN];
-    char config_subentry_id[HA_ID_LEN];
     char device_class[HA_DEVICE_CLASS_LEN];
-    char entity_category[HA_ENTITY_CATEGORY_LEN];
     char name[HA_NAME_LEN];
     char icon[HA_ICON_LEN];
     char unit_of_measurement[HA_UNIT_LEN];
@@ -130,16 +132,27 @@ typedef struct {
 } ha_entity_t;
 
 typedef struct {
-    bool in_use;
     char entity_id[HA_ENTITY_ID_LEN];
-    char state[HA_VALUE_LEN];
+    char state[HA_STATE_LEN];
     ha_attribute_t attributes[HA_MAX_ATTRIBUTES];
-    size_t attribute_count;
+    uint8_t attribute_count;
 } ha_state_t;
+
+typedef struct {
+    size_t device_struct_bytes;
+    size_t entity_struct_bytes;
+    size_t state_struct_bytes;
+    size_t device_pool_bytes;
+    size_t entity_pool_bytes;
+    size_t state_pool_bytes;
+    size_t total_static_bytes;
+} ha_core_footprint_t;
 
 typedef void (*ha_state_listener_t)(const ha_state_t *state, void *ctx);
 
 void ha_core_reset(void);
+uint32_t ha_core_revision(void);
+ha_core_footprint_t ha_core_footprint(void);
 
 bool ha_device_upsert(const ha_device_t *device);
 bool ha_device_remove(const char *device_id);
@@ -156,6 +169,8 @@ const ha_entity_t *ha_entity_get_by_unique_id(
     const char *domain, const char *platform, const char *unique_id);
 size_t ha_entity_count(void);
 const ha_entity_t *ha_entity_at(size_t index);
+size_t ha_entity_count_for_device(const char *device_id);
+const ha_entity_t *ha_entity_at_for_device(const char *device_id, size_t index);
 
 bool ha_state_set(
     const char *entity_id,
@@ -174,9 +189,6 @@ bool ha_entity_call_service(
     const char *service,
     const ha_attribute_t *data,
     size_t data_count);
-
-/* Populate deterministic UI-only demo data. Existing runtime data is cleared. */
-void ha_mock_fixtures_load(void);
 
 #ifdef __cplusplus
 }

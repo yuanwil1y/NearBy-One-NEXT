@@ -1,3 +1,5 @@
+#include "ha_test_fixture.h"
+
 #include "ha_core.h"
 
 #include <string.h>
@@ -16,17 +18,16 @@ static bool mock_service_handler(
     return true;
 }
 
-static ha_device_t device(const char *id, const char *name, const char *manufacturer,
-                          const char *model, const char *platform_id) {
+static ha_device_t device(const char *id, const char *name, const char *model,
+                          const char *semantic_id) {
     ha_device_t out = {0};
     strncpy(out.id, id, sizeof(out.id) - 1);
     strncpy(out.name, name, sizeof(out.name) - 1);
-    strncpy(out.manufacturer, manufacturer, sizeof(out.manufacturer) - 1);
+    strncpy(out.manufacturer, "Test Vendor", sizeof(out.manufacturer) - 1);
     strncpy(out.model, model, sizeof(out.model) - 1);
-    strncpy(out.config_entry_id, "mock-entry", sizeof(out.config_entry_id) - 1);
     out.identifier_count = 1;
     strncpy(out.identifiers[0].domain, "mock", sizeof(out.identifiers[0].domain) - 1);
-    strncpy(out.identifiers[0].value, platform_id, sizeof(out.identifiers[0].value) - 1);
+    strncpy(out.identifiers[0].value, semantic_id, sizeof(out.identifiers[0].value) - 1);
     return out;
 }
 
@@ -38,7 +39,6 @@ static ha_entity_t entity(const char *entity_id, const char *unique_id, const ch
     strncpy(out.platform, "mock", sizeof(out.platform) - 1);
     strncpy(out.domain, domain, sizeof(out.domain) - 1);
     strncpy(out.device_id, device_id, sizeof(out.device_id) - 1);
-    strncpy(out.config_entry_id, "mock-entry", sizeof(out.config_entry_id) - 1);
     strncpy(out.name, name, sizeof(out.name) - 1);
     out.has_entity_name = true;
     out.enabled = true;
@@ -46,20 +46,16 @@ static ha_entity_t entity(const char *entity_id, const char *unique_id, const ch
     return out;
 }
 
-void ha_mock_fixtures_load(void) {
+void ha_test_fixture_load(void) {
     ha_core_reset();
 
-    ha_device_t room = device("dev-env-1", "Living Room Sensor", "Xiaomi", "Mock BLE Env", "env-1");
-    room.connections[0] = (ha_connection_t){0};
-    strncpy(room.connections[0].type, "bluetooth", sizeof(room.connections[0].type) - 1);
-    strncpy(room.connections[0].value, "AA:BB:CC:DD:EE:01", sizeof(room.connections[0].value) - 1);
-    room.connection_count = 1;
+    ha_device_t room = device("dev-env-1", "Test Environment Sensor", "T100", "env-1");
     (void)ha_device_upsert(&room);
 
-    ha_device_t desk = device("dev-desk-1", "Desk Accessories", "NearBy Mock", "UI Fixture", "desk-1");
+    ha_device_t desk = device("dev-control-1", "Test Controls", "C100", "control-1");
     (void)ha_device_upsert(&desk);
 
-    ha_entity_t temperature = entity("sensor.living_room_temperature", "env-1-temp",
+    ha_entity_t temperature = entity("sensor.test_temperature", "env-1-temp",
                                      HA_DOMAIN_SENSOR, room.id, "Temperature");
     strncpy(temperature.device_class, "temperature", sizeof(temperature.device_class) - 1);
     strncpy(temperature.unit_of_measurement, "°C", sizeof(temperature.unit_of_measurement) - 1);
@@ -71,21 +67,21 @@ void ha_mock_fixtures_load(void) {
     };
     (void)ha_state_set(temperature.entity_id, "23.6", temp_attrs, 3);
 
-    ha_entity_t motion = entity("binary_sensor.living_room_motion", "env-1-motion",
+    ha_entity_t motion = entity("binary_sensor.test_motion", "env-1-motion",
                                 HA_DOMAIN_BINARY_SENSOR, room.id, "Motion");
     strncpy(motion.device_class, "motion", sizeof(motion.device_class) - 1);
     (void)ha_entity_upsert(&motion);
     const ha_attribute_t motion_attrs[] = {{.key = "device_class", .value = "motion"}};
     (void)ha_state_set(motion.entity_id, HA_STATE_OFF, motion_attrs, 1);
 
-    ha_entity_t plug = entity("switch.desk_plug", "desk-1-plug", HA_DOMAIN_SWITCH,
-                              desk.id, "Desk Plug");
+    ha_entity_t plug = entity("switch.test_plug", "control-1-plug", HA_DOMAIN_SWITCH,
+                              desk.id, "Test Plug");
     plug.service_handler = mock_service_handler;
     (void)ha_entity_upsert(&plug);
     (void)ha_state_set(plug.entity_id, HA_STATE_ON, NULL, 0);
 
-    ha_entity_t light = entity("light.desk_lamp", "desk-1-light", HA_DOMAIN_LIGHT,
-                               desk.id, "Desk Lamp");
+    ha_entity_t light = entity("light.test_lamp", "control-1-light", HA_DOMAIN_LIGHT,
+                               desk.id, "Test Lamp");
     light.service_handler = mock_service_handler;
     (void)ha_entity_upsert(&light);
     const ha_attribute_t light_attrs[] = {
@@ -94,7 +90,7 @@ void ha_mock_fixtures_load(void) {
     };
     (void)ha_state_set(light.entity_id, HA_STATE_ON, light_attrs, 2);
 
-    ha_entity_t identify = entity("button.desk_identify", "desk-1-identify", HA_DOMAIN_BUTTON,
+    ha_entity_t identify = entity("button.test_identify", "control-1-identify", HA_DOMAIN_BUTTON,
                                   desk.id, "Identify");
     identify.service_handler = mock_service_handler;
     (void)ha_entity_upsert(&identify);
