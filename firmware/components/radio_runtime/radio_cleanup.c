@@ -17,15 +17,12 @@ esp_err_t nearby_radio_scan_cleanup_all(void)
 
     esp_err_t first_error = ESP_OK;
 
-    if (nearby_i154_receive_is_active()) {
-        remember_first_error(nearby_i154_receive_stop(), &first_error);
-    }
-    if (nearby_nimble_driver_is_ready()) {
-        remember_first_error(nearby_nimble_driver_deinit(), &first_error);
-    }
-    if (nearby_wifi_driver_is_started()) {
-        remember_first_error(nearby_wifi_driver_deinit(), &first_error);
-    }
+    /* All three paths are deliberately idempotent. Calling every teardown
+     * catches partial-init/reset states where a simple "ready" flag is false
+     * even though a driver still owns the shared RF phase. */
+    remember_first_error(nearby_i154_receive_stop(), &first_error);
+    remember_first_error(nearby_nimble_driver_deinit(), &first_error);
+    remember_first_error(nearby_wifi_driver_deinit(), &first_error);
 
     return first_error;
 }
