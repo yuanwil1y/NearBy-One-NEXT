@@ -23,26 +23,22 @@ static const char *TAG = "agent-d-bench";
 #define BENCH_STRESS_CYCLES  100U
 #define BENCH_WEB_CYCLES     20U
 
+#if defined(CONFIG_NEARBY_AGENT_D_SD_IO_BENCH) || defined(CONFIG_NEARBY_AGENT_D_SPI_CONTENTION_BENCH)
 static uint8_t s_io_buffer[BENCH_SD_CHUNK] __attribute__((aligned(4)));
-static uint8_t s_read_buffer[BENCH_SD_CHUNK] __attribute__((aligned(4)));
-static uint16_t s_lcd_buffer[NEARBY_BOARD_LCD_H_RES * BENCH_LCD_ROWS];
-
-static void bench_log_resources(const char *label)
-{
-    ESP_LOGI(TAG,
-             "%s free_heap=%" PRIu32 " min_free_heap=%" PRIu32 " stack_hwm=%u words",
-             label,
-             esp_get_free_heap_size(),
-             esp_get_minimum_free_heap_size(),
-             (unsigned)uxTaskGetStackHighWaterMark(NULL));
-}
-
 static void fill_io_pattern(void)
 {
     for (size_t i = 0; i < sizeof(s_io_buffer); ++i) {
         s_io_buffer[i] = (uint8_t)((i * 31U + 7U) & 0xffU);
     }
 }
+#endif
+
+#ifdef CONFIG_NEARBY_AGENT_D_SD_IO_BENCH
+static uint8_t s_read_buffer[BENCH_SD_CHUNK] __attribute__((aligned(4)));
+#endif
+
+#if defined(CONFIG_NEARBY_AGENT_D_LCD_VISUAL_BENCH) || defined(CONFIG_NEARBY_AGENT_D_SPI_CONTENTION_BENCH)
+static uint16_t s_lcd_buffer[NEARBY_BOARD_LCD_H_RES * BENCH_LCD_ROWS];
 
 static esp_err_t lcd_draw_rect(esp_lcd_panel_handle_t panel,
                                int x0,
@@ -70,6 +66,17 @@ static esp_err_t lcd_draw_rect(esp_lcd_panel_handle_t panel,
     }
     return ESP_OK;
 }
+#endif
+
+static void __attribute__((unused)) bench_log_resources(const char *label)
+{
+    ESP_LOGI(TAG,
+             "%s free_heap=%" PRIu32 " min_free_heap=%" PRIu32 " stack_hwm=%u words",
+             label,
+             esp_get_free_heap_size(),
+             esp_get_minimum_free_heap_size(),
+             (unsigned)uxTaskGetStackHighWaterMark(NULL));
+}
 
 #ifdef CONFIG_NEARBY_AGENT_D_LCD_VISUAL_BENCH
 static esp_err_t lcd_visual_bench(const nearby_board_lcd_handles_t *lcd)
@@ -80,10 +87,10 @@ static esp_err_t lcd_visual_bench(const nearby_board_lcd_handles_t *lcd)
     static const uint16_t colors[] = {0xf800, 0x07e0, 0x001f, 0xffff, 0x0000};
     const int band_height = NEARBY_BOARD_LCD_V_RES / (int)(sizeof(colors) / sizeof(colors[0]));
     for (size_t i = 0; i < sizeof(colors) / sizeof(colors[0]); ++i) {
-        int y0 = (int)i * band_height;
-        int y1 = i + 1 == sizeof(colors) / sizeof(colors[0])
-                     ? NEARBY_BOARD_LCD_V_RES
-                     : (int)(i + 1) * band_height;
+        const int y0 = (int)i * band_height;
+        const int y1 = i + 1 == sizeof(colors) / sizeof(colors[0])
+                           ? NEARBY_BOARD_LCD_V_RES
+                           : (int)(i + 1) * band_height;
         esp_err_t err = lcd_draw_rect(lcd->panel, 0, y0, NEARBY_BOARD_LCD_H_RES, y1, colors[i]);
         if (err != ESP_OK) return err;
     }
@@ -136,23 +143,25 @@ static esp_err_t touch_bench(void)
              samples ? max_x : 0,
              samples ? min_y : 0,
              samples ? max_y : 0);
+    bench_log_resources("touch bench complete");
     return samples > 0 ? ESP_OK : ESP_ERR_NOT_FOUND;
 }
 #endif
 
+#ifdef CONFIG_NEARBY_AGENT_D_SD_IO_BENCH
 static esp_err_t sd_write_read_once(const char *path, size_t total_bytes, bool remove_after)
 {
     fill_io_pattern();
     FILE *file = fopen(path, "wb");
     if (file == NULL) return ESP_FAIL;
 
-    int64_t write_start = esp_timer_get_time();
+    const int64_t write_start = esp_timer_get_time();
     size_t written = 0;
     while (written < total_bytes) {
         const size_t remaining = total_bytes - written;
         const size_t chunk = remaining < sizeof(s_io_buffer) ? remaining : sizeof(s_io_buffer);
         if (fwrite(s_io_buffer, 1, chunk, file) != chunk) {
-            fclose(file);
+            (void)fclose(file);
             return ESP_FAIL;
         }
         written += chunk;
@@ -162,14 +171,14 @@ static esp_err_t sd_write_read_once(const char *path, size_t total_bytes, bool r
 
     file = fopen(path, "rb");
     if (file == NULL) return ESP_FAIL;
-    int64_t read_start = esp_timer_get_time();
+    const int64_t read_start = esp_timer_get_time();
     size_t read_total = 0;
     while (read_total < total_bytes) {
         const size_t remaining = total_bytes - read_total;
         const size_t chunk = remaining < sizeof(s_read_buffer) ? remaining : sizeof(s_read_buffer);
         if (fread(s_read_buffer, 1, chunk, file) != chunk ||
             memcmp(s_read_buffer, s_io_buffer, chunk) != 0) {
-            fclose(file);
+            (void)fclose(file);
             return ESP_FAIL;
         }
         read_total += chunk;
@@ -190,7 +199,6 @@ static esp_err_t sd_write_read_once(const char *path, size_t total_bytes, bool r
     return ESP_OK;
 }
 
-#ifdef CONFIG_NEARBY_AGENT_D_SD_IO_BENCH
 static esp_err_t sd_io_bench(void)
 {
     ESP_LOGW(TAG, "BENCH_REQUIRED SD: running bounded non-destructive write/read verification");
@@ -199,7 +207,7 @@ static esp_err_t sd_io_bench(void)
     if (err != ESP_OK) return err;
     err = sd_write_read_once(NEARBY_BOARD_SD_MOUNT_POINT "/nearby-agent-d-io.bin", BENCH_SD_BYTES, true);
     if (!was_mounted) {
-        esp_err_t unmount_err = nearby_board_sd_unmount();
+        const esp_err_t unmount_err = nearby_board_sd_unmount();
         if (err == ESP_OK) err = unmount_err;
     }
     bench_log_resources("SD IO bench complete");
@@ -211,10 +219,11 @@ static esp_err_t sd_io_bench(void)
 static esp_err_t sd_destructive_bench(void)
 {
     ESP_LOGW(TAG, "BENCH_REQUIRED DESTRUCTIVE: whole SD card will be reformatted now");
-    int64_t started = esp_timer_get_time();
-    esp_err_t err = nearby_board_sd_format_whole(true);
+    const int64_t started = esp_timer_get_time();
+    const esp_err_t err = nearby_board_sd_format_whole(true);
     ESP_LOGI(TAG, "whole-SD format result=%s elapsed_us=%" PRId64,
              esp_err_to_name(err), esp_timer_get_time() - started);
+    bench_log_resources("whole-SD format complete");
     return err;
 }
 #endif
@@ -223,7 +232,7 @@ static esp_err_t sd_destructive_bench(void)
 static esp_err_t web_bench(void)
 {
     ESP_LOGW(TAG, "BENCH_REQUIRED SoftAP/HTTP: phone join and API test window is 120 seconds");
-    int64_t started = esp_timer_get_time();
+    const int64_t started = esp_timer_get_time();
     esp_err_t err = nearby_web_mgmt_start();
     if (err != ESP_OK) return err;
 
@@ -239,6 +248,7 @@ static esp_err_t web_bench(void)
     err = nearby_web_mgmt_stop();
     ESP_LOGI(TAG, "SoftAP/HTTP stop result=%s elapsed_us=%" PRId64,
              esp_err_to_name(err), esp_timer_get_time() - started);
+    bench_log_resources("SoftAP/HTTP stopped");
     return err;
 }
 #endif
@@ -264,6 +274,7 @@ static void sd_contention_worker(void *arg)
         result->stack_hwm = uxTaskGetStackHighWaterMark(NULL);
         xSemaphoreGive(result->done);
         vTaskDelete(NULL);
+        return;
     }
 
     const int64_t started = esp_timer_get_time();
@@ -294,21 +305,30 @@ static esp_err_t spi_contention_bench(const nearby_board_lcd_handles_t *lcd)
     if (lcd == NULL || lcd->panel == NULL) return ESP_ERR_INVALID_ARG;
     ESP_LOGW(TAG, "BENCH_REQUIRED SPI2: simultaneous LCD flush calls and SD write");
 
+    const bool was_mounted = nearby_board_sd_is_mounted();
     esp_err_t err = nearby_board_sd_mount(false);
     if (err != ESP_OK) return err;
 
     memset(&s_sd_worker, 0, sizeof(s_sd_worker));
     s_sd_worker.done = xSemaphoreCreateBinaryStatic(&s_sd_done_storage);
-    if (s_sd_worker.done == NULL) return ESP_ERR_NO_MEM;
+    if (s_sd_worker.done == NULL) {
+        if (!was_mounted) (void)nearby_board_sd_unmount();
+        return ESP_ERR_NO_MEM;
+    }
 
     if (xTaskCreate(sd_contention_worker, "sd-contention", 4096, &s_sd_worker, 4, NULL) != pdPASS) {
+        if (!was_mounted) (void)nearby_board_sd_unmount();
         return ESP_ERR_NO_MEM;
     }
 
     int64_t max_draw_call_us = 0;
     uint32_t draw_calls = 0;
     uint16_t color = 0x001f;
-    while (xSemaphoreTake(s_sd_worker.done, 0) != pdTRUE) {
+    bool worker_done = false;
+    while (!worker_done) {
+        worker_done = xSemaphoreTake(s_sd_worker.done, 0) == pdTRUE;
+        if (worker_done) break;
+
         const int y = (int)((draw_calls * BENCH_LCD_ROWS) % NEARBY_BOARD_LCD_V_RES);
         const int y1 = y + (int)BENCH_LCD_ROWS <= NEARBY_BOARD_LCD_V_RES
                            ? y + (int)BENCH_LCD_ROWS
@@ -323,12 +343,22 @@ static esp_err_t spi_contention_bench(const nearby_board_lcd_handles_t *lcd)
         vTaskDelay(1);
     }
 
+    if (!worker_done) {
+        (void)xSemaphoreTake(s_sd_worker.done, portMAX_DELAY);
+    }
     (void)unlink(NEARBY_BOARD_SD_MOUNT_POINT "/nearby-agent-d-contention.bin");
+
     ESP_LOGI(TAG,
              "SPI contention lcd_draw_calls=%" PRIu32 " max_draw_call_us=%" PRId64
              " sd_result=%s sd_elapsed_us=%" PRId64 " sd_stack_hwm=%u words",
              draw_calls, max_draw_call_us, esp_err_to_name(s_sd_worker.result),
              s_sd_worker.elapsed_us, (unsigned)s_sd_worker.stack_hwm);
+    bench_log_resources("SPI contention complete");
+
+    if (!was_mounted) {
+        const esp_err_t unmount_err = nearby_board_sd_unmount();
+        if (err == ESP_OK) err = unmount_err;
+    }
     if (err != ESP_OK) return err;
     return s_sd_worker.result;
 }
@@ -352,9 +382,9 @@ static esp_err_t stress_bench(void)
         if (err == ESP_OK) err = nearby_i154_receive_start(11);
         if (err == ESP_OK) err = nearby_i154_receive_stop();
 
-        esp_err_t cleanup_err = nearby_radio_scan_cleanup_all();
+        const esp_err_t cleanup_err = nearby_radio_scan_cleanup_all();
         if (cleanup_err != ESP_OK) return cleanup_err;
-        esp_err_t end_err = scan_session_end();
+        const esp_err_t end_err = scan_session_end();
         if (err != ESP_OK) return err;
         if (end_err != ESP_OK) return end_err;
 
@@ -383,37 +413,35 @@ static esp_err_t stress_bench(void)
 
 esp_err_t agent_d_bench_run(const nearby_board_lcd_handles_t *lcd)
 {
-    esp_err_t err = ESP_OK;
-
 #ifdef CONFIG_NEARBY_AGENT_D_LCD_VISUAL_BENCH
-    err = lcd_visual_bench(lcd);
+    esp_err_t err = lcd_visual_bench(lcd);
     if (err != ESP_OK) return err;
 #endif
 #ifdef CONFIG_NEARBY_AGENT_D_TOUCH_BENCH
-    err = touch_bench();
-    if (err != ESP_OK) return err;
+    esp_err_t touch_err = touch_bench();
+    if (touch_err != ESP_OK) return touch_err;
 #endif
 #ifdef CONFIG_NEARBY_AGENT_D_SD_IO_BENCH
-    err = sd_io_bench();
-    if (err != ESP_OK) return err;
+    esp_err_t sd_err = sd_io_bench();
+    if (sd_err != ESP_OK) return sd_err;
 #endif
 #ifdef CONFIG_NEARBY_AGENT_D_SD_DESTRUCTIVE_BENCH
-    err = sd_destructive_bench();
-    if (err != ESP_OK) return err;
+    esp_err_t format_err = sd_destructive_bench();
+    if (format_err != ESP_OK) return format_err;
 #endif
 #ifdef CONFIG_NEARBY_AGENT_D_SPI_CONTENTION_BENCH
-    err = spi_contention_bench(lcd);
-    if (err != ESP_OK) return err;
+    esp_err_t contention_err = spi_contention_bench(lcd);
+    if (contention_err != ESP_OK) return contention_err;
 #endif
 #ifdef CONFIG_NEARBY_AGENT_D_WEB_BENCH
-    err = web_bench();
-    if (err != ESP_OK) return err;
+    esp_err_t web_err = web_bench();
+    if (web_err != ESP_OK) return web_err;
 #endif
 #ifdef CONFIG_NEARBY_AGENT_D_STRESS_BENCH
-    err = stress_bench();
-    if (err != ESP_OK) return err;
+    esp_err_t stress_err = stress_bench();
+    if (stress_err != ESP_OK) return stress_err;
 #endif
 
     (void)lcd;
-    return err;
+    return ESP_OK;
 }
