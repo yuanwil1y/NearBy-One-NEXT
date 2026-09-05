@@ -21,7 +21,26 @@ typedef struct {
     void *ctx;
 } nearby_db_validation_hooks_t;
 
-/** Explicit destructive step. Requires the Web/upper-layer competing-op owner. */
+/**
+ * Record C's preflight verdict for the source DB about to be installed.
+ *
+ * D does not decide validation semantics. `safe_to_format=true` means C (or
+ * the thin integration glue invoking C) has completed its preflight and says
+ * the destructive install may proceed to the separate user-confirmation step.
+ * Passing false clears any prior authorization.
+ *
+ * The authorization is RAM-only and one-shot; D consumes it before attempting
+ * a destructive format, including failed attempts.
+ */
+esp_err_t nearby_db_storage_set_preflight_safe_to_format(bool safe_to_format);
+bool nearby_db_storage_preflight_is_authorized(void);
+
+/**
+ * Explicit destructive step. Requires all three conditions:
+ *  1. an active Web/upper-layer competing-operation lease;
+ *  2. a current C-owned safe_to_format preflight authorization;
+ *  3. a separate explicit user confirmation (`confirmed=true`).
+ */
 esp_err_t nearby_db_storage_prepare_whole_sd(bool confirmed);
 
 /** Start a bounded direct-to-SD upload after prepare_whole_sd succeeds. */
