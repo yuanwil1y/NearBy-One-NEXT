@@ -1,0 +1,25 @@
+name: Agent D ESP-IDF v6.1 build
+
+on:
+  push:
+    branches:
+      - agent-d/hardware-driver-audit
+    paths:
+      - "firmware/**"
+      - ".github/workflows/agent-d-idf61-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build-esp32c6:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build firmware with ESP-IDF v6.1
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.1
+          target: esp32c6
+          path: firmware
