@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "esp_netif_ip_addr.h"
 #include "esp_random.h"
 #include "esp_wifi.h"
 #include "esp_wifi_default.h"
@@ -25,6 +26,12 @@ static esp_err_t send_plain(httpd_req_t *req, const char *text)
 {
     httpd_resp_set_type(req, "text/plain");
     return httpd_resp_sendstr(req, text);
+}
+
+static esp_err_t send_status_plain(httpd_req_t *req, const char *status, const char *text)
+{
+    httpd_resp_set_status(req, status);
+    return send_plain(req, text);
 }
 
 static void format_ipv4(esp_netif_t *netif, char out[16])
@@ -165,8 +172,7 @@ static esp_err_t wifi_connect_handler(httpd_req_t *req)
     if (err == ESP_OK) err = nearby_wifi_sta_connect();
     if (err != ESP_OK) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "connect start failed");
 
-    httpd_resp_set_status(req, "202 Accepted");
-    return send_plain(req, "connecting");
+    return send_status_plain(req, "202 Accepted", "connecting");
 }
 
 static esp_err_t db_format_handler(httpd_req_t *req)
@@ -187,11 +193,11 @@ static esp_err_t db_format_handler(httpd_req_t *req)
 static esp_err_t db_upload_handler(httpd_req_t *req)
 {
     if (!s_db_hooks_set || req->content_len == 0) {
-        return httpd_resp_send_err(req, HTTPD_503_SERVICE_UNAVAILABLE, "DB validator not registered or empty upload");
+        return send_status_plain(req, "503 Service Unavailable", "DB validator not registered or empty upload");
     }
 
     esp_err_t err = nearby_db_upload_begin(req->content_len, &s_db_hooks);
-    if (err != ESP_OK) return httpd_resp_send_err(req, HTTPD_409_CONFLICT, "DB upload not prepared");
+    if (err != ESP_OK) return send_status_plain(req, "409 Conflict", "DB upload not prepared");
 
     uint8_t chunk[WEB_UPLOAD_CHUNK_BYTES];
     size_t remaining = req->content_len;
