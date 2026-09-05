@@ -62,7 +62,7 @@
   ],
   "scope": "full pinned HA generated Bluetooth + full pinned ZHA zhaquirks tree",
   "timing_ms": {
-    "build": 532.137,
-    "release_validation": 0.463
+    "build": 668.156,
+    "release_validation": 0.496
   }
 }
