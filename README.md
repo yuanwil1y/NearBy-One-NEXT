@@ -15,3 +15,13 @@ The project goal is to maximize upstream code/data reuse and minimize new code. 
 
 - Track A: Home Assistant source, discovery databases, Device / Entity / State model, integrations and parser dependencies.
 - Track B: Bettercap, Wireshark, Scapy, Kismet, Aircrack-ng, hcxdumptool, mitmproxy, BtleJack, nRF Sniffer and Responder scanner/source reuse map.
+
+## Agent E UI v0.1
+
+The `agent-e/lvgl-ha-ui` branch contains the first mock-driven UI deliverables:
+
+- `components/nearby_ui/` — 170x320 LVGL Home/Device/Settings UI with HA-inspired blue/white cards, real module-completion scan progress, and a full-screen scan-time touch blocker.
+- `web-portal/index.html` — mobile-first static Web Management prototype with only Wi-Fi and Database primary sections.
+- `docs/ui-v0.1.md` — UI/backend boundary and integration notes for Agents A/B/C/D.
+
+The UI surface is intentionally scanner/protocol agnostic and boots idle; mock scanning is only a bring-up harness.
