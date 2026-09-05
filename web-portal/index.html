@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>NearBy One NEXT Setup</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ha-blue: #03a9f4;
+      --ha-blue-dark: #0288d1;
+      --bg: #f4f7f9;
+      --card: #fff;
+      --text: #263238;
+      --muted: #607d8b;
+      --line: #dfe6ea;
+      --danger: #b3261e;
+      --ok: #2e7d32;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      padding: calc(14px + env(safe-area-inset-top)) 18px 14px;
+      background: var(--ha-blue);
+      color: white;
+      box-shadow: 0 1px 0 rgba(0,0,0,.08);
+    }
+    header strong { display: block; font-size: 18px; }
+    header span { font-size: 13px; opacity: .9; }
+    main { width: min(100%, 560px); margin: 0 auto; padding: 14px 14px 32px; }
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      padding: 4px;
+      margin-bottom: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #eaf0f3;
+    }
+    .tab {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-weight: 700;
+    }
+    .tab[aria-selected="true"] { background: white; color: var(--ha-blue-dark); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card {
+      margin-bottom: 12px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--card);
+    }
+    h2 { margin: 0 0 4px; font-size: 18px; }
+    h3 { margin: 0 0 10px; font-size: 15px; }
+    p { margin: 6px 0 12px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    label { display: block; margin: 12px 0 6px; font-weight: 650; font-size: 14px; }
+    input[type="text"], input[type="password"], input[type="file"] {
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid #bdc9cf;
+      border-radius: 10px;
+      background: white;
+      padding: 10px 12px;
+      font: inherit;
+      color: var(--text);
+    }
+    button.primary {
+      width: 100%;
+      min-height: 46px;
+      margin-top: 14px;
+      border: 0;
+      border-radius: 11px;
+      background: var(--ha-blue);
+      color: white;
+      font: inherit;
+      font-weight: 750;
+    }
+    button.primary:disabled { opacity: .45; }
+    .networks { display: grid; gap: 8px; margin-top: 12px; }
+    .network {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 10px;
+      min-height: 48px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: white;
+      text-align: left;
+      font: inherit;
+      color: var(--text);
+    }
+    .network.selected { border-color: var(--ha-blue); box-shadow: inset 0 0 0 1px var(--ha-blue); }
+    .signal { color: var(--muted); font-size: 13px; white-space: nowrap; }
+    .warning {
+      padding: 12px;
+      border: 1px solid #efb8b3;
+      border-radius: 12px;
+      background: #fff3f2;
+      color: #7d211b;
+    }
+    .confirm { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; }
+    .confirm input { width: 20px; height: 20px; margin: 2px 0 0; flex: 0 0 auto; }
+    progress { width: 100%; height: 10px; margin-top: 10px; accent-color: var(--ha-blue); }
+    .status { min-height: 22px; margin-top: 10px; color: var(--muted); font-size: 14px; }
+    .status.ok { color: var(--ok); }
+    .status.error { color: var(--danger); }
+    .meta { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; font-size: 13px; }
+    .meta dt { color: var(--muted); }
+    .meta dd { margin: 0; text-align: right; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>NearBy One NEXT</strong>
+    <span>Web Management · static v0.1 prototype</span>
+  </header>
+
+  <main>
+    <nav class="tabs" aria-label="Setup sections">
+      <button class="tab" type="button" data-tab="wifi" aria-selected="true">Wi‑Fi</button>
+      <button class="tab" type="button" data-tab="database" aria-selected="false">Database</button>
+    </nav>
+
+    <section id="wifi" class="panel active">
+      <div class="card">
+        <h2>Connect to Wi‑Fi</h2>
+        <p class="muted">Choose a nearby network or enter its name manually.</p>
+
+        <div id="networkList" class="networks" aria-label="Nearby networks"></div>
+
+        <label for="ssid">Network name</label>
+        <input id="ssid" type="text" autocomplete="off" placeholder="SSID">
+
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="Wi‑Fi password">
+
+        <button id="connectButton" class="primary" type="button">Connect / Save</button>
+        <progress id="wifiProgress" value="0" max="100" hidden></progress>
+        <div id="wifiStatus" class="status" role="status">Ready.</div>
+      </div>
+    </section>
+
+    <section id="database" class="panel">
+      <div class="card">
+        <h2>Recognition database</h2>
+        <p class="muted">Import a NearBy recognition database from your phone or computer.</p>
+
+        <label for="dbFile">Database file</label>
+        <input id="dbFile" type="file">
+        <div id="fileSummary" class="status">No file selected.</div>
+
+        <div class="warning">
+          <strong>This replaces the SD-card database.</strong>
+          <p>Importing may format or reinitialize the SD card before the new database is written.</p>
+        </div>
+
+        <label class="confirm">
+          <input id="confirmReplace" type="checkbox">
+          <span>I understand that the existing SD-card database may be erased and replaced.</span>
+        </label>
+
+        <button id="importButton" class="primary" type="button" disabled>Prepare SD &amp; Import</button>
+        <progress id="dbProgress" value="0" max="100" hidden></progress>
+        <div id="dbStatus" class="status" role="status">Waiting for a database file.</div>
+      </div>
+
+      <div class="card">
+        <h3>Current database</h3>
+        <dl class="meta">
+          <dt>Status</dt><dd>Ready (mock)</dd>
+          <dt>Version</dt><dd>mock-db 0.1</dd>
+          <dt>Build</dt><dd>2026-09-06-demo</dd>
+        </dl>
+        <p class="muted">Backend validation rules and accepted binary format are intentionally not defined in this UI prototype; Agent C supplies them.</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const mockNetworks = [
+      { ssid: "Home WiFi", signal: "Strong" },
+      { ssid: "Studio", signal: "Good" },
+      { ssid: "Guest Network", signal: "Fair" }
+    ];
+
+    const tabs = [...document.querySelectorAll(".tab")];
+    const panels = [...document.querySelectorAll(".panel")];
+    tabs.forEach((tab) => tab.addEventListener("click", () => {
+      tabs.forEach((item) => item.setAttribute("aria-selected", item === tab ? "true" : "false"));
+      panels.forEach((panel) => panel.classList.toggle("active", panel.id === tab.dataset.tab));
+    }));
+
+    const networkList = document.querySelector("#networkList");
+    const ssid = document.querySelector("#ssid");
+    mockNetworks.forEach((network) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "network";
+      button.innerHTML = `<span>${network.ssid}</span><span class="signal">${network.signal}</span>`;
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".network").forEach((item) => item.classList.remove("selected"));
+        button.classList.add("selected");
+        ssid.value = network.ssid;
+      });
+      networkList.append(button);
+    });
+
+    function runMockProgress(progress, status, messages, doneText) {
+      progress.hidden = false;
+      progress.value = 0;
+      status.className = "status";
+      let step = 0;
+      const timer = setInterval(() => {
+        status.textContent = messages[Math.min(step, messages.length - 1)];
+        progress.value = Math.min(100, (step + 1) * Math.ceil(100 / messages.length));
+        step += 1;
+        if (step >= messages.length) {
+          clearInterval(timer);
+          progress.value = 100;
+          status.textContent = doneText;
+          status.className = "status ok";
+        }
+      }, 450);
+    }
+
+    document.querySelector("#connectButton").addEventListener("click", () => {
+      const status = document.querySelector("#wifiStatus");
+      if (!ssid.value.trim()) {
+        status.textContent = "Choose or enter a network name.";
+        status.className = "status error";
+        return;
+      }
+      runMockProgress(
+        document.querySelector("#wifiProgress"),
+        status,
+        ["Saving network settings…", "Connecting…", "Checking connection…"],
+        "Connected successfully (mock)."
+      );
+    });
+
+    const dbFile = document.querySelector("#dbFile");
+    const confirmReplace = document.querySelector("#confirmReplace");
+    const importButton = document.querySelector("#importButton");
+    const fileSummary = document.querySelector("#fileSummary");
+
+    function updateImportReady() {
+      importButton.disabled = !(dbFile.files.length && confirmReplace.checked);
+    }
+
+    dbFile.addEventListener("change", () => {
+      const file = dbFile.files[0];
+      fileSummary.textContent = file
+        ? `${file.name} · ${(file.size / 1024).toFixed(1)} KiB selected`
+        : "No file selected.";
+      updateImportReady();
+    });
+    confirmReplace.addEventListener("change", updateImportReady);
+
+    importButton.addEventListener("click", () => {
+      if (!dbFile.files.length || !confirmReplace.checked) return;
+      const status = document.querySelector("#dbStatus");
+      runMockProgress(
+        document.querySelector("#dbProgress"),
+        status,
+        [
+          "Validating file header…",
+          "Preparing SD card…",
+          "Streaming database to final storage…",
+          "Verifying imported database…"
+        ],
+        "Database imported and validated (mock)."
+      );
+    });
+  </script>
+</body>
+</html>
