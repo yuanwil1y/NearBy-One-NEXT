@@ -1,0 +1,15 @@
+{
+  "build_epoch": 1788634001,
+  "home_assistant_core": {
+    "repository": "home-assistant/core",
+    "revision": "2a1c7d1a864ed7cf9f6fb16c8a0ece7d01e16d48",
+    "source_path": "homeassistant/generated/bluetooth.py",
+    "license_spdx": "Apache-2.0"
+  },
+  "zha_device_handlers": {
+    "repository": "zigpy/zha-device-handlers",
+    "revision": "6a3822c1348f9e40ad243eb881084a1c075da277",
+    "source_path": "zhaquirks",
+    "license_spdx": "Apache-2.0"
+  }
+}

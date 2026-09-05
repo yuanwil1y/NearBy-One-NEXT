@@ -1,0 +1,74 @@
+name: Agent C pinned recognition DB proof
+
+on:
+  push:
+    branches:
+      - agent-c/device-database
+    paths:
+      - .github/workflows/agent-c-pinned-build.yml
+      - tools/dbgen/pins.json
+      - tools/dbgen/build_pinned.py
+      - tools/dbgen/nearby_dbgen.py
+      - tools/dbgen/preflight.py
+      - tools/dbgen/test_*.py
+
+permissions:
+  contents: write
+
+jobs:
+  pinned-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent-c/device-database
+          fetch-depth: 1
+
+      - name: Read immutable pins
+        id: pins
+        shell: bash
+        run: |
+          echo "ha=$(python -c 'import json; print(json.load(open("tools/dbgen/pins.json"))["home_assistant_core"]["revision"])')" >> "$GITHUB_OUTPUT"
+          echo "zha=$(python -c 'import json; print(json.load(open("tools/dbgen/pins.json"))["zha_device_handlers"]["revision"])')" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch pinned Home Assistant generated Bluetooth source
+        shell: bash
+        run: |
+          mkdir -p /tmp/nearby-ha/homeassistant/generated
+          curl --fail --location --silent --show-error \
+            "https://raw.githubusercontent.com/home-assistant/core/${{ steps.pins.outputs.ha }}/homeassistant/generated/bluetooth.py" \
+            --output /tmp/nearby-ha/homeassistant/generated/bluetooth.py
+
+      - name: Fetch pinned ZHA source tree without executing it
+        shell: bash
+        run: |
+          git init /tmp/nearby-zha
+          git -C /tmp/nearby-zha remote add origin https://github.com/zigpy/zha-device-handlers.git
+          git -C /tmp/nearby-zha -c protocol.version=2 fetch --depth=1 --filter=blob:none origin "${{ steps.pins.outputs.zha }}"
+          git -C /tmp/nearby-zha checkout --detach FETCH_HEAD -- zhaquirks
+
+      - name: Run host corruption and generator tests
+        run: python -m unittest discover -s tools/dbgen -p 'test_*.py' -v
+
+      - name: Build and validate real pinned database
+        run: |
+          mkdir -p artifacts/pinned
+          python tools/dbgen/build_pinned.py \
+            --pins tools/dbgen/pins.json \
+            --ha-bluetooth /tmp/nearby-ha/homeassistant/generated/bluetooth.py \
+            --zha-root /tmp/nearby-zha/zhaquirks \
+            --out artifacts/pinned/nearby.nbdb \
+            --report docs/db/coverage-pinned.json
+          python tools/dbgen/preflight.py artifacts/pinned/nearby.nbdb --release
+
+      - name: Commit pinned proof to this branch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/pinned/nearby.nbdb docs/db/coverage-pinned.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Update real pinned recognition DB coverage proof"
+          git push origin HEAD:agent-c/device-database
