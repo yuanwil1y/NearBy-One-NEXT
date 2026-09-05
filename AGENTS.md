@@ -21,9 +21,11 @@ Build the NearBy One NEXT user interface for the Waveshare ESP32-C6-Touch-LCD-1.
 
 ### Nearby device list
 
-The home screen is a single scrollable list/grid of Device cards.
+The home screen is a **single-column vertically scrollable list of Device cards**.
 
-Each Device card must be intentionally uniform and minimal:
+This is a deliberate product decision for the 170px-wide display. Do not implement a two-column grid for v0.1.
+
+Each Device card must be intentionally uniform, compact, and easy to tap:
 
 - device icon
 - device display name
@@ -32,9 +34,44 @@ Do **not** render Entity values, Entity controls, manufacturer/model, RSSI, prot
 
 All cards should use one generic layout regardless of vendor, protocol, or Entity composition. Avoid special-case card implementations for lights, sensors, media players, etc.
 
+The list must support more devices than fit on one physical screen:
+
+- use LVGL native vertical scrolling on the Device-list container;
+- keep the top/header region fixed if a header is used;
+- cards scroll vertically beneath the header;
+- do not paginate nearby devices into separate pages;
+- do not cap the logical device list to the number visible on screen;
+- touch targets must remain comfortable on the 170x320 panel;
+- favor a compact fixed/consistent card height so scrolling behavior stays predictable;
+- device names should receive most of the horizontal space; truncate only when necessary.
+
+The initial visual target is approximately:
+
+```text
+┌──────────────────────┐
+│ Nearby            12 │
+├──────────────────────┤
+│ ┌──────────────────┐ │
+│ │  [icon]  Device  │ │
+│ └──────────────────┘ │
+│ ┌──────────────────┐ │
+│ │  [icon]  Device  │ │
+│ └──────────────────┘ │
+│ ┌──────────────────┐ │
+│ │  [icon]  Device  │ │
+│ └──────────────────┘ │
+│         ...          │
+│     vertical scroll  │
+└──────────────────────┘
+```
+
+Exact pixel sizes should be tuned on real hardware rather than treated as a new layout framework. A roughly 44-50px card height is a reasonable starting point, but implementation should prioritize legibility and touch comfort.
+
 ### Device detail
 
 Tapping a Device opens a detail screen. Only here should the UI enumerate and render that Device's Entities using Home Assistant domain/state/attributes semantics.
+
+The Device detail screen must also be vertically scrollable because a Device may expose more Entities than fit on one 170x320 screen.
 
 Examples:
 
@@ -57,7 +94,9 @@ The product is a portable, transient nearby-device browser/controller, not a fix
 
 ## Current phase
 
-Do not implement the final screen hierarchy until the UI design is agreed in the project discussion. The first implementation target will be a minimal static LVGL prototype with:
+The v0.1 screen hierarchy is now constrained to:
 
-1. one Nearby screen containing uniform icon + name Device cards using mock data;
-2. one generic Device detail screen that renders mock Entity/State data.
+1. one single-column scrollable Nearby Device-card screen using mock data;
+2. one vertically scrollable generic Device detail screen that renders mock Entity/State data.
+
+Do not add additional primary navigation or dashboard concepts until these two screens work well on the real 170x320 touch panel.
