@@ -10,16 +10,31 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-esp32c6:
+  build-default:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
         uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Build firmware with ESP-IDF v6.1
+      - name: Build default firmware with ESP-IDF v6.1
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v6.1
           target: esp32c6
           path: firmware
+
+  build-all-benches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Compile every BENCH_REQUIRED path with ESP-IDF v6.1
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.1
+          target: esp32c6
+          path: firmware
+          command: idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.bench-ci" build
