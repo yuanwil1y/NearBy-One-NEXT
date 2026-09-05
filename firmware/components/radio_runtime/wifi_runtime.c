@@ -18,6 +18,13 @@ static esp_err_t require_radio_access(void)
     return ESP_ERR_INVALID_STATE;
 }
 
+static void latch_scan_fatal_if_owner(esp_err_t reason)
+{
+    if (reason != ESP_OK && scan_session_require_scan_owner() == ESP_OK) {
+        (void)scan_session_mark_fatal(reason);
+    }
+}
+
 static void destroy_sta_netif(void)
 {
     if (s_sta_netif != NULL) {
@@ -26,11 +33,12 @@ static void destroy_sta_netif(void)
     }
 }
 
-static void release_wifi_phase_if_owned(void)
+static esp_err_t release_wifi_phase_if_owned(void)
 {
     if (nearby_radio_phase_current() == NEARBY_RADIO_PHASE_WIFI) {
-        (void)nearby_radio_phase_release(NEARBY_RADIO_PHASE_WIFI);
+        return nearby_radio_phase_release(NEARBY_RADIO_PHASE_WIFI);
     }
+    return ESP_OK;
 }
 
 esp_err_t nearby_wifi_driver_init(void)
@@ -74,16 +82,29 @@ esp_err_t nearby_wifi_driver_init(void)
     s_wifi_started = true;
     return ESP_OK;
 
-fail_driver:
-    if (esp_wifi_deinit() == ESP_OK) {
-        s_wifi_initialized = false;
-        destroy_sta_netif();
-        release_wifi_phase_if_owned();
+fail_driver: {
+        esp_err_t deinit_err = esp_wifi_deinit();
+        if (deinit_err == ESP_OK) {
+            s_wifi_initialized = false;
+            destroy_sta_netif();
+            esp_err_t phase_err = release_wifi_phase_if_owned();
+            if (phase_err != ESP_OK) {
+                latch_scan_fatal_if_owner(phase_err);
+                return phase_err;
+            }
+        } else {
+            latch_scan_fatal_if_owner(deinit_err);
+        }
+        return err;
     }
-    return err;
-fail_phase:
-    release_wifi_phase_if_owned();
-    return err;
+fail_phase: {
+        esp_err_t phase_err = release_wifi_phase_if_owned();
+        if (phase_err != ESP_OK) {
+            latch_scan_fatal_if_owner(phase_err);
+            return phase_err;
+        }
+        return err;
+    }
 }
 
 static esp_err_t perform_active_scan(wifi_ap_record_t *records, uint16_t *inout_count, bool show_hidden)
@@ -187,8 +208,9 @@ esp_err_t nearby_wifi_driver_deinit(void)
     if (require_radio_access() != ESP_OK) return ESP_ERR_INVALID_STATE;
     if (!s_wifi_initialized) {
         destroy_sta_netif();
-        release_wifi_phase_if_owned();
-        return ESP_OK;
+        esp_err_t phase_err = release_wifi_phase_if_owned();
+        if (phase_err != ESP_OK) latch_scan_fatal_if_owner(phase_err);
+        return phase_err;
     }
 
     esp_err_t first_err = nearby_wifi_promiscuous_stop();
@@ -197,13 +219,17 @@ esp_err_t nearby_wifi_driver_deinit(void)
     if (stop_err == ESP_OK || stop_err == ESP_ERR_WIFI_NOT_STARTED) s_wifi_started = false;
 
     esp_err_t deinit_err = esp_wifi_deinit();
-    if (deinit_err != ESP_OK) return first_err != ESP_OK ? first_err : deinit_err;
+    if (deinit_err != ESP_OK) {
+        latch_scan_fatal_if_owner(deinit_err);
+        return first_err != ESP_OK ? first_err : deinit_err;
+    }
 
     s_wifi_initialized = false;
     s_wifi_started = false;
     s_wifi_promiscuous = false;
     destroy_sta_netif();
     esp_err_t phase_err = nearby_radio_phase_release(NEARBY_RADIO_PHASE_WIFI);
+    if (phase_err != ESP_OK) latch_scan_fatal_if_owner(phase_err);
     return first_err != ESP_OK ? first_err : phase_err;
 }
 
