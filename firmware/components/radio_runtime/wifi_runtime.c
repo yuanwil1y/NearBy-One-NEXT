@@ -179,7 +179,8 @@ esp_err_t nearby_wifi_set_ap_config(const wifi_config_t *config)
     if (scan_session_require_competing_active() != ESP_OK) return ESP_ERR_INVALID_STATE;
     esp_err_t err = nearby_wifi_driver_init();
     if (err != ESP_OK) return err;
-    return esp_wifi_set_config(WIFI_IF_AP, config);
+    wifi_config_t writable_config = *config;
+    return esp_wifi_set_config(WIFI_IF_AP, &writable_config);
 }
 
 esp_err_t nearby_wifi_set_sta_config(const wifi_config_t *config)
@@ -188,7 +189,8 @@ esp_err_t nearby_wifi_set_sta_config(const wifi_config_t *config)
     if (scan_session_require_competing_active() != ESP_OK) return ESP_ERR_INVALID_STATE;
     esp_err_t err = nearby_wifi_driver_init();
     if (err != ESP_OK) return err;
-    return esp_wifi_set_config(WIFI_IF_STA, config);
+    wifi_config_t writable_config = *config;
+    return esp_wifi_set_config(WIFI_IF_STA, &writable_config);
 }
 
 esp_err_t nearby_wifi_sta_connect(void)
