@@ -18,6 +18,20 @@ static void remember_error(esp_err_t candidate, esp_err_t *first_error)
     }
 }
 
+static bool should_emit(const nearby_ble_scan_config_t *config,
+                        nearby_ble_scan_stats_t *stats,
+                        const nearby_ble_normalized_t *normalized)
+{
+    if (config->dedup == NULL) {
+        return true;
+    }
+    if (nearby_ble_dedup_should_emit(config->dedup, normalized)) {
+        return true;
+    }
+    ++stats->duplicate_records;
+    return false;
+}
+
 static esp_err_t emit_legacy(const nearby_ble_scan_config_t *config,
                              nearby_ble_scan_stats_t *stats,
                              nearby_ble_disc_record_t *record)
@@ -35,7 +49,7 @@ static esp_err_t emit_legacy(const nearby_ble_scan_config_t *config,
         if (parsed == NEARBY_BLE_PARSE_PARTIAL) {
             ++stats->partial_records;
         }
-        if (config->observation_cb != NULL) {
+        if (should_emit(config, stats, &normalized) && config->observation_cb != NULL) {
             callback_err = config->observation_cb(&normalized, parsed,
                                                   config->observation_ctx);
             if (callback_err == ESP_OK) {
@@ -66,7 +80,7 @@ static esp_err_t emit_extended(const nearby_ble_scan_config_t *config,
         if (parsed == NEARBY_BLE_PARSE_PARTIAL) {
             ++stats->partial_records;
         }
-        if (config->observation_cb != NULL) {
+        if (should_emit(config, stats, &normalized) && config->observation_cb != NULL) {
             callback_err = config->observation_cb(&normalized, parsed,
                                                   config->observation_ctx);
             if (callback_err == ESP_OK) {
@@ -116,7 +130,6 @@ static esp_err_t consume_batch(const nearby_ble_scan_config_t *config,
 
 static void discard_queued_records(void)
 {
-    /* Queue capacities are fixed by D; this loop is bounded by the number queued. */
 #if MYNEWT_VAL(BLE_EXT_ADV)
     for (;;) {
         nearby_ble_ext_disc_record_t *ext = NULL;
@@ -202,7 +215,6 @@ esp_err_t nearby_ble_scan_run(const nearby_ble_scan_config_t *config,
     remember_error(nearby_nimble_scan_stop(), &first_error);
 
     if (first_error == ESP_OK) {
-        /* Capture reports already queued when stop/auto-complete became terminal. */
         bool consumed_any = false;
         do {
             consumed_any = false;
@@ -210,7 +222,6 @@ esp_err_t nearby_ble_scan_run(const nearby_ble_scan_config_t *config,
             remember_error(err, &first_error);
         } while (consumed_any && err == ESP_OK);
     } else {
-        /* On sink/ownership failure, return all D slots without invoking callbacks. */
         discard_queued_records();
     }
 
