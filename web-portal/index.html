@@ -389,6 +389,22 @@
 
   confirmReplace.addEventListener('change', updateImportReady);
 
+  async function waitForFormatResult() {
+    for (let attempt = 0; attempt < 140; ++attempt) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const response = await fetch('/api/status', {cache:'no-store'});
+      if (!response.ok) throw new Error(`Format status failed: ${await response.text()}`);
+      const status = await response.json();
+      const stage = status.db_format_stage || 'unknown';
+      if (status.db_format_state === 'ready') return status;
+      if (status.db_format_state === 'failed') {
+        throw new Error(`Format failed at ${stage} (error ${status.db_format_error}).`);
+      }
+      setStatus(dbStatus, `Formatting the entire SD card (${stage})...`);
+    }
+    throw new Error('Format failed: device did not finish before the client deadline.');
+  }
+
   importButton.addEventListener('click', async () => {
     const file = dbFile.files[0];
     if (!file || validatedSignature !== signature(file) || !confirmReplace.checked) return;
@@ -399,6 +415,7 @@
       setStatus(dbStatus, 'Formatting the entire SD card…');
       let response = await fetch('/api/db/format?confirm=ERASE', {method:'POST'});
       if (!response.ok) throw new Error(`Format failed: ${await response.text()}`);
+      await waitForFormatResult();
 
       dbProgress.value = 60;
       setStatus(dbStatus, 'Streaming database to .part; device will verify before promotion…');

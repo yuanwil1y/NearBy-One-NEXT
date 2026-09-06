@@ -65,8 +65,23 @@ esp_err_t nearby_board_cst816_init(void);
 /** Read one raw CST816 sample. Coordinate orientation is intentionally untouched. */
 esp_err_t nearby_board_cst816_read(nearby_board_touch_sample_t *out_sample);
 
+typedef enum {
+    NEARBY_BOARD_SD_FORMAT_IDLE = 0,
+    NEARBY_BOARD_SD_FORMAT_UNMOUNT,
+    NEARBY_BOARD_SD_FORMAT_RAW_OPEN,
+    NEARBY_BOARD_SD_FORMAT_ERASE_HEAD,
+    NEARBY_BOARD_SD_FORMAT_ERASE_TAIL,
+    NEARBY_BOARD_SD_FORMAT_RAW_CLOSE,
+    NEARBY_BOARD_SD_FORMAT_REMOUNT_FAT,
+    NEARBY_BOARD_SD_FORMAT_COMPLETE,
+} nearby_board_sd_format_stage_t;
+
 /** Mount the card as FATFS on the already initialized shared SPI2 bus. */
 esp_err_t nearby_board_sd_mount(bool format_if_mount_failed);
+
+nearby_board_sd_format_stage_t nearby_board_sd_format_stage(void);
+const char *nearby_board_sd_format_stage_name(nearby_board_sd_format_stage_t stage);
+esp_err_t nearby_board_sd_format_error(void);
 
 /** Unmount FATFS and detach only the SD SPI device; never free SPI2 here. */
 esp_err_t nearby_board_sd_unmount(void);

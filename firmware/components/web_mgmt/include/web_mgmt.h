@@ -21,7 +21,6 @@ typedef enum {
 typedef struct {
     bool active;
     char ssid[33];
-    char password[65];
     char ap_ipv4[16];
     char sta_ipv4[16];
     bool sta_connected;
@@ -29,21 +28,18 @@ typedef struct {
     bool db_format_authorized;
 } nearby_web_mgmt_status_t;
 
-/** Register C-owned DB validation hooks used by the raw upload endpoint. */
 esp_err_t nearby_web_mgmt_set_db_validation_hooks(const nearby_db_validation_hooks_t *hooks);
 
-/**
- * Reserve the product gate, start session-only Wi-Fi in APSTA mode, create a
- * temporary WPA2 SoftAP and start the narrow transport HTTP API.
- */
+/** Start HTTP + an open beta SoftAP while retaining any existing RAM-only STA session. */
 esp_err_t nearby_web_mgmt_start(void);
 
-/** Stop HTTP/SoftAP/Wi-Fi and release the competing-operation gate. */
+/** Stop only HTTP + SoftAP. An active STA session and RF lease are preserved. */
 esp_err_t nearby_web_mgmt_stop(void);
 
-esp_err_t nearby_web_mgmt_get_status(nearby_web_mgmt_status_t *out_status);
+/** Owner-task cleanup after a preserved STA session disconnects or fails. */
+esp_err_t nearby_web_mgmt_maintenance(void);
 
-/** Expose the server handle so Agent E can register its static portal routes. */
+esp_err_t nearby_web_mgmt_get_status(nearby_web_mgmt_status_t *out_status);
 httpd_handle_t nearby_web_mgmt_httpd(void);
 
 #ifdef __cplusplus

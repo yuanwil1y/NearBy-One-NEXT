@@ -42,8 +42,7 @@ void nearby_ui_refresh_from_ha(void);
 void nearby_ui_set_versions(const char *database_status, const char *firmware_version);
 void nearby_ui_set_portal_info(bool running,
                                const char *ssid,
-                               const char *address,
-                               const char *pin);
+                               const char *address);
 /* Runtime-only Wi-Fi STA state; credentials are never accepted by this API. */
 void nearby_ui_set_sta_status(nearby_ui_sta_state_t state, const char *ipv4);
 

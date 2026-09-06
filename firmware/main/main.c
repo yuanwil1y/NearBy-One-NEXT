@@ -104,7 +104,7 @@ static void update_db_status(void)
             nearby_db_file_info_t info;
             nearby_db_result_t result = nearby_db_validate_release_file(NEARBY_DB_FINAL_PATH, &info);
             if (result == NEARBY_DB_OK) {
-                (void)snprintf(status, sizeof(status), "Ready · v%" PRIu32, info.db_version);
+                (void)snprintf(status, sizeof(status), "Ready - v%" PRIu32, info.db_version);
             } else {
                 copy_text(status, sizeof(status), "Invalid");
             }
@@ -200,14 +200,14 @@ static void owner_start_portal(void)
 {
     if (nearby_ui_scan_state() == NEARBY_UI_SCAN_SCANNING || scan_session_is_active()) {
         ESP_LOGW(TAG, "Web Management rejected while scanning");
-        nearby_ui_set_portal_info(false, NULL, NULL, NULL);
+        nearby_ui_set_portal_info(false, NULL, NULL);
         return;
     }
 
     esp_err_t err = nearby_web_mgmt_start();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Web Management start failed: %s", esp_err_to_name(err));
-        nearby_ui_set_portal_info(false, NULL, NULL, NULL);
+        nearby_ui_set_portal_info(false, NULL, NULL);
         return;
     }
 
@@ -215,7 +215,7 @@ static void owner_start_portal(void)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Static Web Portal registration failed: %s", esp_err_to_name(err));
         (void)nearby_web_mgmt_stop();
-        nearby_ui_set_portal_info(false, NULL, NULL, NULL);
+        nearby_ui_set_portal_info(false, NULL, NULL);
         return;
     }
 
@@ -223,8 +223,7 @@ static void owner_start_portal(void)
     if (nearby_web_mgmt_get_status(&status) == ESP_OK) {
         nearby_ui_set_portal_info(true,
                                   status.ssid,
-                                  status.ap_ipv4[0] ? status.ap_ipv4 : "192.168.4.1",
-                                  status.password);
+                                  status.ap_ipv4[0] ? status.ap_ipv4 : "192.168.4.1");
     }
     update_sta_status();
 }
@@ -237,9 +236,9 @@ static void owner_stop_portal(void)
             ESP_LOGE(TAG, "Web Management stop failed: %s", esp_err_to_name(err));
         }
     }
-    nearby_ui_set_portal_info(false, NULL, NULL, NULL);
+    nearby_ui_set_portal_info(false, NULL, NULL);
     update_sta_status();
-    update_db_status();
+    if (!nearby_db_storage_format_is_active()) update_db_status();
 }
 
 static void owner_call_service(const owner_command_t *command)
@@ -350,6 +349,10 @@ static void product_owner_task(void *arg)
 
         const int64_t now_us = esp_timer_get_time();
         if (now_us >= next_sta_refresh_us) {
+            esp_err_t maintenance_err = nearby_web_mgmt_maintenance();
+            if (maintenance_err != ESP_OK && maintenance_err != ESP_ERR_INVALID_STATE) {
+                ESP_LOGW(TAG, "Web Management maintenance failed: %s", esp_err_to_name(maintenance_err));
+            }
             update_sta_status();
             next_sta_refresh_us = now_us + 500000;
         }

@@ -21,44 +21,29 @@ typedef struct {
     void *ctx;
 } nearby_db_validation_hooks_t;
 
-/**
- * Record C's preflight verdict for the source DB about to be installed.
- *
- * D does not decide validation semantics. `safe_to_format=true` means C (or
- * the thin integration glue invoking C) has completed its preflight and says
- * the destructive install may proceed to the separate user-confirmation step.
- * Passing false clears any prior authorization.
- *
- * The authorization is RAM-only and one-shot; D consumes it before attempting
- * a destructive format, including failed attempts.
- */
+typedef enum {
+    NEARBY_DB_FORMAT_IDLE = 0,
+    NEARBY_DB_FORMAT_RUNNING,
+    NEARBY_DB_FORMAT_READY,
+    NEARBY_DB_FORMAT_FAILED,
+} nearby_db_format_state_t;
+
 esp_err_t nearby_db_storage_set_preflight_safe_to_format(bool safe_to_format);
 bool nearby_db_storage_preflight_is_authorized(void);
 
-/**
- * Explicit destructive step. Requires all three conditions:
- *  1. an active Web/upper-layer competing-operation lease;
- *  2. a current C-owned safe_to_format preflight authorization;
- *  3. a separate explicit user confirmation (`confirmed=true`).
- */
+/** Start destructive whole-card preparation on a dedicated worker task. */
 esp_err_t nearby_db_storage_prepare_whole_sd(bool confirmed);
+nearby_db_format_state_t nearby_db_storage_format_state(void);
+const char *nearby_db_storage_format_state_name(nearby_db_format_state_t state);
+const char *nearby_db_storage_format_stage(void);
+esp_err_t nearby_db_storage_format_error(void);
+bool nearby_db_storage_format_is_active(void);
 
-/** Start a bounded direct-to-SD upload after prepare_whole_sd succeeds. */
 esp_err_t nearby_db_upload_begin(size_t expected_bytes,
                                  const nearby_db_validation_hooks_t *hooks);
-
-/** Write exactly this chunk to `.part`; no whole-file buffering is performed. */
 esp_err_t nearby_db_upload_write(const uint8_t *data, size_t len);
-
-/**
- * Flush, verify exact byte count (when nonzero), invoke C-owned finalize hook,
- * and only then promote `.part` to the final DB path.
- */
 esp_err_t nearby_db_upload_finish(void);
-
-/** Close and delete `.part`; safe to call after interrupted HTTP transfers. */
 esp_err_t nearby_db_upload_cancel(void);
-
 bool nearby_db_upload_is_active(void);
 size_t nearby_db_upload_bytes_written(void);
 

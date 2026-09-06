@@ -58,7 +58,6 @@ static struct {
     bool portal_running;
     char portal_ssid[48];
     char portal_address[32];
-    char portal_pin[24];
 } g;
 
 static void safe_copy(char *dst, size_t cap, const char *src)
@@ -373,7 +372,7 @@ static void show_detail(const char *device_id)
     if (device->manufacturer[0] || device->model[0]) {
         char meta[100];
         (void)snprintf(meta, sizeof(meta), "%s%s%s", device->manufacturer,
-                       device->manufacturer[0] && device->model[0] ? " · " : "",
+                       device->manufacturer[0] && device->model[0] ? " - " : "",
                        device->model);
         lv_obj_t *label = lv_label_create(list);
         lv_label_set_text(label, meta);
@@ -416,13 +415,11 @@ static void render_portal_modal(void)
 
     char text[180];
     if (g.portal_running) {
-        (void)snprintf(text, sizeof(text), "Connect to:\n%s\n\nOpen:\n%s%s%s",
+        (void)snprintf(text, sizeof(text), "Connect to:\n%s\n\nOpen:\n%s",
                        g.portal_ssid[0] ? g.portal_ssid : "NearBy-One",
-                       g.portal_address[0] ? g.portal_address : "192.168.4.1",
-                       g.portal_pin[0] ? "\n\nPassword: " : "",
-                       g.portal_pin);
+                       g.portal_address[0] ? g.portal_address : "192.168.4.1");
     } else {
-        (void)snprintf(text, sizeof(text), "Starting Web Management…");
+        (void)snprintf(text, sizeof(text), "Starting Web Management...");
     }
 
     lv_obj_t *credentials = lv_obj_create(g.portal_modal);
@@ -624,12 +621,11 @@ void nearby_ui_set_versions(const char *database_status, const char *firmware_ve
     if (g.fw_value_label) lv_label_set_text(g.fw_value_label, g.firmware);
 }
 
-void nearby_ui_set_portal_info(bool running, const char *ssid, const char *address, const char *pin)
+void nearby_ui_set_portal_info(bool running, const char *ssid, const char *address)
 {
     g.portal_running = running;
     safe_copy(g.portal_ssid, sizeof(g.portal_ssid), ssid);
     safe_copy(g.portal_address, sizeof(g.portal_address), address);
-    safe_copy(g.portal_pin, sizeof(g.portal_pin), pin);
     if (g.portal_modal) render_portal_modal();
 }
 
