@@ -1,4 +1,4 @@
-name: Apply beta.4 QA patch retry 2
+name: Apply beta.4 QA product patch
 
 on:
   push:
@@ -21,7 +21,6 @@ jobs:
           python tools/beta4_retry_followup.py
           python tools/beta4_retry_web.py
           python tools/beta4_retry_ui_portal.py
-          python tools/beta4_retry_ci.py
       - name: Run regression guards before commit
         run: |
           python tests/integration/test_beta1_bench_regressions.py
@@ -38,11 +37,8 @@ jobs:
                   firmware/main/main.c \
                   firmware/main/portal_index.html \
                   web-portal/index.html \
-                  tests/integration/test_beta4_qa_regressions.py \
-                  .github/workflows/qa-beta1-bench-fix.yml \
-                  .github/workflows/beta-release.yml
-          git rm -f .github/workflows/apply-beta4-patch.yml \
-                    tools/beta4_patch.py \
+                  tests/integration/test_beta4_qa_regressions.py
+          git rm -f tools/beta4_patch.py \
                     tools/beta4_retry_storage.py \
                     tools/beta4_retry_followup.py \
                     tools/beta4_retry_web.py \
