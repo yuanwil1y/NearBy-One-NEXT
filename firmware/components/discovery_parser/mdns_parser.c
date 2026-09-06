@@ -46,7 +46,6 @@ static int decode_name(const uint8_t *msg, size_t len, size_t start,
             if (!jumped) {
                 *next = pos + 1;
             }
-            /* HA/zeroconf service types use absolute DNS names with a trailing dot. */
             if (!first) {
                 if (write < NEARBY_MDNS_NAME_MAX) {
                     out[write] = '.';
@@ -137,7 +136,6 @@ static void infer_service_type(nearby_mdns_service_t *svc)
     if (dot != NULL && dot[1] == '_') {
         strncpy(svc->service_type, dot + 1, NEARBY_MDNS_NAME_MAX);
         svc->service_type[NEARBY_MDNS_NAME_MAX] = '\0';
-        lowercase(svc->service_type);
     }
 }
 
@@ -188,7 +186,6 @@ static bool add_txt(nearby_mdns_service_t *svc,
             memcpy(txt->key, s, key_copy);
         }
         txt->key[key_copy] = '\0';
-        lowercase(txt->key);
         txt->truncated = key_copy != key_len;
 
         if (eq < slen) {
@@ -296,7 +293,6 @@ nearby_lan_parse_result_t nearby_mdns_parse(const uint8_t *message,
             if (svc != NULL) {
                 strncpy(svc->service_type, owner, NEARBY_MDNS_NAME_MAX);
                 svc->service_type[NEARBY_MDNS_NAME_MAX] = '\0';
-                lowercase(svc->service_type);
             }
         } else if (type == DNS_TYPE_SRV) {
             if (rdlen < 6u) {
