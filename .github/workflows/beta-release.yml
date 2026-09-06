@@ -1,0 +1,60 @@
+name: NearBy One NEXT beta release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  beta-release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build ESP-IDF v6.1 firmware and two-file package
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.1
+          target: esp32c6
+          path: firmware
+          command: >-
+            idf.py build &&
+            mkdir -p ../release &&
+            cd build &&
+            esptool --chip esp32c6 merge-bin -o ../../release/NearBy-One-NEXT-ESP32C6.bin @flash_args &&
+            cd .. &&
+            cp ../artifacts/pinned/nearby.nbdb ../release/NearBy-One-NEXT.nbdb
+
+      - name: Publish v0.1.0-beta.1 prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.1.0-beta.1 \
+            release/NearBy-One-NEXT-ESP32C6.bin \
+            release/NearBy-One-NEXT.nbdb \
+            --target "$GITHUB_SHA" \
+            --title "NearBy One NEXT v0.1.0-beta.1" \
+            --prerelease \
+            --notes-file - <<'EOF'
+          First public beta for Waveshare ESP32-C6-Touch-LCD-1.9.
+
+          Release files:
+          - `NearBy-One-NEXT-ESP32C6.bin` — merged ESP32-C6 image; flash from address `0x0`.
+          - `NearBy-One-NEXT.nbdb` — recognition database; install through Web Management → Database.
+
+          Software integration status:
+          - ESP-IDF v6.1 host/integration/default/bench compile CI passed before promotion to main.
+          - D → B → C → A → E production runtime is integrated.
+          - Runtime product state remains RAM-only; recognition DB is the only product data intentionally persisted.
+
+          Beta warning:
+          - LCD/touch, SD, RF scanning, SoftAP/Web Management and real-device recognition still require physical-board `BENCH_REQUIRED` validation.
+          - Treat this as a beta / release candidate for bench testing, not a production-stable release.
+          EOF
