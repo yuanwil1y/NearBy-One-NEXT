@@ -503,8 +503,8 @@ esp_err_t nearby_web_mgmt_stop(void)
         s_ap_netif = NULL;
     }
     s_status.active = false;
-    s_status.ssid[0] = ' ';
-    s_status.ap_ipv4[0] = ' ';
+    s_status.ssid[0] = '\0';
+    s_status.ap_ipv4[0] = '\0';
 
     if (sta_runtime_active() || nearby_db_storage_format_is_active()) {
         return first_err;
@@ -529,7 +529,7 @@ esp_err_t nearby_web_mgmt_maintenance(void)
 
     char ip[16];
     format_ipv4(nearby_wifi_sta_netif(), ip);
-    if (ip[0] != ' ') {
+    if (ip[0] != '\0') {
         s_sta_state = NEARBY_WEB_STA_CONNECTED;
         return ESP_OK;
     }
@@ -558,7 +558,7 @@ esp_err_t nearby_web_mgmt_get_status(nearby_web_mgmt_status_t *out_status)
     format_ipv4(nearby_wifi_sta_netif(), status.sta_ipv4);
     status.db_format_authorized = nearby_db_storage_preflight_is_authorized();
 
-    if (status.sta_ipv4[0] != ' ') {
+    if (status.sta_ipv4[0] != '\0') {
         s_sta_state = NEARBY_WEB_STA_CONNECTED;
         status.sta_state = NEARBY_WEB_STA_CONNECTED;
     } else if (s_sta_state == NEARBY_WEB_STA_CONNECTING &&
