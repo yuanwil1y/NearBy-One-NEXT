@@ -100,9 +100,7 @@ void nearby_scan_dedup_reset(nearby_scan_dedup_t *state, uint32_t generation)
 static void hash_ble_facts(hash_pair_t *h, const nearby_ble_discovery_facts_t *facts)
 {
     hash_bool(h, facts->has_flags);
-    if (facts->has_flags) {
-        hash_u8(h, facts->flags);
-    }
+    if (facts->has_flags) hash_u8(h, facts->flags);
     hash_bool(h, facts->has_local_name);
     if (facts->has_local_name) {
         hash_string(h, facts->local_name);
@@ -111,8 +109,7 @@ static void hash_ble_facts(hash_pair_t *h, const nearby_ble_discovery_facts_t *f
     }
     hash_u8(h, facts->service_uuid_count);
     for (uint8_t i = 0; i < facts->service_uuid_count; ++i) {
-        hash_bytes(h, facts->service_uuids[i].bytes,
-                   sizeof(facts->service_uuids[i].bytes));
+        hash_bytes(h, facts->service_uuids[i].bytes, sizeof(facts->service_uuids[i].bytes));
     }
     hash_u8(h, facts->service_data_count);
     for (uint8_t i = 0; i < facts->service_data_count; ++i) {
@@ -131,13 +128,9 @@ static void hash_ble_facts(hash_pair_t *h, const nearby_ble_discovery_facts_t *f
         hash_bool(h, entry->data_truncated);
     }
     hash_bool(h, facts->has_tx_power);
-    if (facts->has_tx_power) {
-        hash_u8(h, (uint8_t)facts->tx_power);
-    }
+    if (facts->has_tx_power) hash_u8(h, (uint8_t)facts->tx_power);
     hash_bool(h, facts->has_appearance);
-    if (facts->has_appearance) {
-        hash_u16(h, facts->appearance);
-    }
+    if (facts->has_appearance) hash_u16(h, facts->appearance);
     hash_bool(h, facts->source_incomplete);
     hash_bool(h, facts->partial_tail);
 }
@@ -145,18 +138,14 @@ static void hash_ble_facts(hash_pair_t *h, const nearby_ble_discovery_facts_t *f
 bool nearby_ble_dedup_should_emit(nearby_scan_dedup_t *state,
                                   const nearby_ble_normalized_t *observation)
 {
-    if (state == NULL || observation == NULL) {
-        return false;
-    }
+    if (state == NULL || observation == NULL) return false;
     hash_pair_t h;
     hash_init(&h);
     hash_bytes(&h, observation->meta.address, sizeof(observation->meta.address));
     hash_u8(&h, observation->meta.address_type);
     hash_bool(&h, observation->meta.legacy);
     hash_bool(&h, observation->meta.connectable_known);
-    if (observation->meta.connectable_known) {
-        hash_bool(&h, observation->meta.connectable);
-    }
+    if (observation->meta.connectable_known) hash_bool(&h, observation->meta.connectable);
     hash_u8(&h, observation->meta.sid);
     hash_u8(&h, observation->meta.data_status);
     hash_ble_facts(&h, &observation->facts);
@@ -166,44 +155,32 @@ bool nearby_ble_dedup_should_emit(nearby_scan_dedup_t *state,
 bool nearby_mdns_dedup_should_emit(nearby_scan_dedup_t *state,
                                    const nearby_mdns_service_t *service)
 {
-    if (state == NULL || service == NULL) {
-        return false;
-    }
+    if (state == NULL || service == NULL) return false;
     hash_pair_t h;
     hash_init(&h);
     hash_string(&h, service->service_type);
     hash_string(&h, service->instance);
     hash_string(&h, service->host);
     hash_bool(&h, service->has_port);
-    if (service->has_port) {
-        hash_u16(&h, service->port);
-    }
+    if (service->has_port) hash_u16(&h, service->port);
     hash_u8(&h, service->txt_count);
     for (uint8_t i = 0; i < service->txt_count; ++i) {
         hash_string(&h, service->txt[i].key);
         hash_bool(&h, service->txt[i].has_value);
-        if (service->txt[i].has_value) {
-            hash_string(&h, service->txt[i].value);
-        }
+        if (service->txt[i].has_value) hash_string(&h, service->txt[i].value);
         hash_bool(&h, service->txt[i].truncated);
     }
     hash_bool(&h, service->has_ipv4);
-    if (service->has_ipv4) {
-        hash_bytes(&h, service->ipv4, sizeof(service->ipv4));
-    }
+    if (service->has_ipv4) hash_bytes(&h, service->ipv4, sizeof(service->ipv4));
     hash_bool(&h, service->has_ipv6);
-    if (service->has_ipv6) {
-        hash_bytes(&h, service->ipv6, sizeof(service->ipv6));
-    }
+    if (service->has_ipv6) hash_bytes(&h, service->ipv6, sizeof(service->ipv6));
     return table_should_emit(&state->mdns, &h);
 }
 
 bool nearby_ssdp_dedup_should_emit(nearby_scan_dedup_t *state,
                                    const nearby_ssdp_facts_t *facts)
 {
-    if (state == NULL || facts == NULL) {
-        return false;
-    }
+    if (state == NULL || facts == NULL) return false;
     hash_pair_t h;
     hash_init(&h);
     hash_string(&h, facts->usn);
@@ -221,9 +198,7 @@ bool nearby_ssdp_dedup_should_emit(nearby_scan_dedup_t *state,
 bool nearby_dhcp_dedup_should_emit(nearby_scan_dedup_t *state,
                                    const nearby_dhcp_facts_t *facts)
 {
-    if (state == NULL || facts == NULL) {
-        return false;
-    }
+    if (state == NULL || facts == NULL) return false;
     hash_pair_t h;
     hash_init(&h);
     hash_u8(&h, facts->chaddr_len);
@@ -233,4 +208,60 @@ bool nearby_dhcp_dedup_should_emit(nearby_scan_dedup_t *state,
     hash_u8(&h, facts->client_identifier_len);
     hash_bytes(&h, facts->client_identifier, facts->client_identifier_len);
     return table_should_emit(&state->dhcp, &h);
+}
+
+bool nearby_wifi_active_dedup_should_emit(nearby_scan_dedup_t *state,
+                                         const nearby_wifi_active_facts_t *facts)
+{
+    if (state == NULL || facts == NULL) return false;
+    hash_pair_t h;
+    hash_init(&h);
+    hash_bytes(&h, facts->bssid, sizeof(facts->bssid));
+    hash_u8(&h, facts->ssid_len);
+    hash_bytes(&h, facts->ssid, facts->ssid_len);
+    hash_bool(&h, facts->hidden_ssid);
+    hash_u8(&h, facts->primary_channel);
+    hash_u16(&h, (uint16_t)facts->authmode);
+    return table_should_emit(&state->wifi_active, &h);
+}
+
+static void hash_wifi_mgmt(hash_pair_t *h, const nearby_wifi_mgmt_facts_t *facts)
+{
+    hash_u8(h, facts->subtype);
+    hash_bytes(h, facts->source, sizeof(facts->source));
+    hash_bytes(h, facts->bssid, sizeof(facts->bssid));
+    hash_bool(h, facts->has_ssid);
+    if (facts->has_ssid) {
+        hash_u8(h, facts->ssid_len);
+        hash_bytes(h, facts->ssid, facts->ssid_len);
+        hash_bool(h, facts->hidden_ssid);
+    }
+    hash_bool(h, facts->has_channel);
+    if (facts->has_channel) hash_u8(h, facts->channel);
+    hash_bool(h, facts->has_capability);
+    if (facts->has_capability) hash_u16(h, facts->capability);
+    hash_u8(h, facts->supported_rate_count);
+    hash_bytes(h, facts->supported_rates, facts->supported_rate_count);
+    hash_bool(h, facts->has_rsn);
+    hash_bool(h, facts->has_ht);
+    hash_bool(h, facts->has_he);
+    hash_bool(h, facts->has_wps);
+    hash_u8(h, facts->vendor_ie_count);
+    for (uint8_t i = 0; i < facts->vendor_ie_count; ++i) {
+        hash_bytes(h, facts->vendor_ies[i].oui, sizeof(facts->vendor_ies[i].oui));
+        hash_u8(h, facts->vendor_ies[i].data_len);
+        hash_bytes(h, facts->vendor_ies[i].data, facts->vendor_ies[i].data_len);
+        hash_bool(h, facts->vendor_ies[i].truncated);
+    }
+}
+
+bool nearby_wifi_passive_dedup_should_emit(
+    nearby_scan_dedup_t *state,
+    const nearby_wifi_passive_normalized_t *observation)
+{
+    if (state == NULL || observation == NULL) return false;
+    hash_pair_t h;
+    hash_init(&h);
+    hash_wifi_mgmt(&h, &observation->facts);
+    return table_should_emit(&state->wifi_passive, &h);
 }
