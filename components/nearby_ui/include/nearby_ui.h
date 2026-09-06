@@ -12,6 +12,13 @@ typedef enum {
     NEARBY_UI_SCAN_SCANNING,
 } nearby_ui_scan_state_t;
 
+typedef enum {
+    NEARBY_UI_STA_DISCONNECTED = 0,
+    NEARBY_UI_STA_CONNECTING,
+    NEARBY_UI_STA_CONNECTED,
+    NEARBY_UI_STA_FAILED,
+} nearby_ui_sta_state_t;
+
 typedef struct {
     void (*scan_requested)(void *ctx);
     void (*portal_start_requested)(void *ctx);
@@ -37,6 +44,8 @@ void nearby_ui_set_portal_info(bool running,
                                const char *ssid,
                                const char *address,
                                const char *pin);
+/* Runtime-only Wi-Fi STA state; credentials are never accepted by this API. */
+void nearby_ui_set_sta_status(nearby_ui_sta_state_t state, const char *ipv4);
 
 #ifdef __cplusplus
 }
