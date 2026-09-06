@@ -4,8 +4,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "esp_event.h"
 #include "esp_netif_ip_addr.h"
 #include "esp_random.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "esp_wifi_default.h"
 #include "radio_runtime.h"
@@ -14,6 +16,7 @@
 #define WEB_SCAN_MAX_APS       16
 #define WEB_FORM_MAX_BYTES     256
 #define WEB_UPLOAD_CHUNK_BYTES 2048
+#define WEB_STA_CONNECT_TIMEOUT_US (20LL * 1000LL * 1000LL)
 
 static httpd_handle_t s_server;
 static esp_netif_t *s_ap_netif;
@@ -21,6 +24,12 @@ static nearby_web_mgmt_status_t s_status;
 static nearby_db_validation_hooks_t s_db_hooks;
 static bool s_db_hooks_set;
 static wifi_ap_record_t s_scan_records[WEB_SCAN_MAX_APS];
+static volatile nearby_web_mgmt_sta_state_t s_sta_state = NEARBY_WEB_STA_DISCONNECTED;
+static int64_t s_sta_connect_started_us;
+static esp_event_handler_instance_t s_sta_disconnect_handler;
+static esp_event_handler_instance_t s_sta_got_ip_handler;
+static bool s_sta_handlers_registered;
+static volatile bool s_ignore_disconnect_once;
 
 static esp_err_t send_plain(httpd_req_t *req, const char *text)
 {
@@ -41,7 +50,7 @@ static void format_ipv4(esp_netif_t *netif, char out[16])
         return;
     }
     esp_netif_ip_info_t info;
-    if (esp_netif_get_ip_info(netif, &info) == ESP_OK) {
+    if (esp_netif_get_ip_info(netif, &info) == ESP_OK && info.ip.addr != 0) {
         snprintf(out, 16, IPSTR, IP2STR(&info.ip));
     }
 }
@@ -88,21 +97,96 @@ static esp_err_t form_decode(const char *input, char *output, size_t output_size
     return ESP_OK;
 }
 
+static const char *sta_state_name(nearby_web_mgmt_sta_state_t state)
+{
+    switch (state) {
+    case NEARBY_WEB_STA_CONNECTING: return "connecting";
+    case NEARBY_WEB_STA_CONNECTED: return "connected";
+    case NEARBY_WEB_STA_FAILED: return "failed";
+    case NEARBY_WEB_STA_DISCONNECTED:
+    default: return "disconnected";
+    }
+}
+
+static void sta_event_handler(void *arg, esp_event_base_t base, int32_t id, void *event_data)
+{
+    (void)arg;
+    (void)event_data;
+
+    if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
+        s_sta_state = NEARBY_WEB_STA_CONNECTED;
+        return;
+    }
+
+    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+        if (s_ignore_disconnect_once) {
+            s_ignore_disconnect_once = false;
+            return;
+        }
+        if (s_sta_state == NEARBY_WEB_STA_CONNECTING) {
+            s_sta_state = NEARBY_WEB_STA_FAILED;
+        } else if (s_sta_state == NEARBY_WEB_STA_CONNECTED) {
+            s_sta_state = NEARBY_WEB_STA_DISCONNECTED;
+        }
+    }
+}
+
+static esp_err_t register_sta_handlers(void)
+{
+    if (s_sta_handlers_registered) return ESP_OK;
+
+    esp_err_t err = esp_event_handler_instance_register(WIFI_EVENT,
+                                                         WIFI_EVENT_STA_DISCONNECTED,
+                                                         sta_event_handler,
+                                                         NULL,
+                                                         &s_sta_disconnect_handler);
+    if (err != ESP_OK) return err;
+
+    err = esp_event_handler_instance_register(IP_EVENT,
+                                              IP_EVENT_STA_GOT_IP,
+                                              sta_event_handler,
+                                              NULL,
+                                              &s_sta_got_ip_handler);
+    if (err != ESP_OK) {
+        (void)esp_event_handler_instance_unregister(WIFI_EVENT,
+                                                    WIFI_EVENT_STA_DISCONNECTED,
+                                                    s_sta_disconnect_handler);
+        return err;
+    }
+
+    s_sta_handlers_registered = true;
+    return ESP_OK;
+}
+
+static void unregister_sta_handlers(void)
+{
+    if (!s_sta_handlers_registered) return;
+
+    (void)esp_event_handler_instance_unregister(WIFI_EVENT,
+                                                WIFI_EVENT_STA_DISCONNECTED,
+                                                s_sta_disconnect_handler);
+    (void)esp_event_handler_instance_unregister(IP_EVENT,
+                                                IP_EVENT_STA_GOT_IP,
+                                                s_sta_got_ip_handler);
+    s_sta_handlers_registered = false;
+}
+
 static esp_err_t status_handler(httpd_req_t *req)
 {
     nearby_web_mgmt_status_t status;
     esp_err_t err = nearby_web_mgmt_get_status(&status);
     if (err != ESP_OK) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "status failed");
 
-    char response[320];
+    char response[384];
     snprintf(response, sizeof(response),
              "{\"active\":%s,\"ssid\":\"%s\",\"ap_ipv4\":\"%s\","
-             "\"sta_connected\":%s,\"sta_ipv4\":\"%s\","
+             "\"sta_connected\":%s,\"sta_state\":\"%s\",\"sta_ipv4\":\"%s\","
              "\"db_format_authorized\":%s}",
              status.active ? "true" : "false",
              status.ssid,
              status.ap_ipv4,
              status.sta_connected ? "true" : "false",
+             sta_state_name(status.sta_state),
              status.sta_ipv4,
              status.db_format_authorized ? "true" : "false");
     httpd_resp_set_type(req, "application/json");
@@ -174,10 +258,28 @@ static esp_err_t wifi_connect_handler(httpd_req_t *req)
     memcpy(config.sta.ssid, ssid, ssid_len);
     memcpy(config.sta.password, password, password_len);
 
-    (void)nearby_wifi_sta_disconnect();
+    wifi_ap_record_t current_ap;
+    if (esp_wifi_sta_get_ap_info(&current_ap) == ESP_OK) {
+        s_ignore_disconnect_once = true;
+        s_sta_state = NEARBY_WEB_STA_DISCONNECTED;
+        (void)nearby_wifi_sta_disconnect();
+    }
+
     err = nearby_wifi_set_sta_config(&config);
-    if (err == ESP_OK) err = nearby_wifi_sta_connect();
-    if (err != ESP_OK) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "connect start failed");
+    if (err != ESP_OK) {
+        s_sta_state = NEARBY_WEB_STA_FAILED;
+        s_sta_connect_started_us = 0;
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "connect start failed");
+    }
+
+    s_sta_state = NEARBY_WEB_STA_CONNECTING;
+    s_sta_connect_started_us = esp_timer_get_time();
+    err = nearby_wifi_sta_connect();
+    if (err != ESP_OK) {
+        s_sta_state = NEARBY_WEB_STA_FAILED;
+        s_sta_connect_started_us = 0;
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "connect start failed");
+    }
 
     return send_status_plain(req, "202 Accepted", "connecting");
 }
@@ -291,6 +393,11 @@ esp_err_t nearby_web_mgmt_start(void)
 
     err = nearby_wifi_driver_init();
     if (err != ESP_OK) goto fail_gate;
+    s_sta_state = NEARBY_WEB_STA_DISCONNECTED;
+    s_sta_connect_started_us = 0;
+    s_ignore_disconnect_once = false;
+    err = register_sta_handlers();
+    if (err != ESP_OK) goto fail_wifi;
 
     s_ap_netif = esp_netif_create_default_wifi_ap();
     if (s_ap_netif == NULL) {
@@ -345,6 +452,7 @@ fail_ap:
     esp_netif_destroy_default_wifi(s_ap_netif);
     s_ap_netif = NULL;
 fail_wifi:
+    unregister_sta_handlers();
     (void)nearby_wifi_driver_deinit();
 fail_gate:
     (void)nearby_db_storage_set_preflight_safe_to_format(false);
@@ -365,7 +473,12 @@ esp_err_t nearby_web_mgmt_stop(void)
     }
     if (nearby_db_upload_is_active()) (void)nearby_db_upload_cancel();
     (void)nearby_db_storage_set_preflight_safe_to_format(false);
+    if (s_sta_state == NEARBY_WEB_STA_CONNECTED) s_ignore_disconnect_once = true;
     (void)nearby_wifi_sta_disconnect();
+    unregister_sta_handlers();
+    s_sta_state = NEARBY_WEB_STA_DISCONNECTED;
+    s_sta_connect_started_us = 0;
+    s_ignore_disconnect_once = false;
 
     if (s_ap_netif != NULL) {
         esp_netif_destroy_default_wifi(s_ap_netif);
@@ -387,9 +500,23 @@ esp_err_t nearby_web_mgmt_get_status(nearby_web_mgmt_status_t *out_status)
     status.active = s_server != NULL;
     format_ipv4(s_ap_netif, status.ap_ipv4);
     format_ipv4(nearby_wifi_sta_netif(), status.sta_ipv4);
-    wifi_ap_record_t ap_info;
-    status.sta_connected = esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK;
     status.db_format_authorized = nearby_db_storage_preflight_is_authorized();
+
+    if (!status.active) {
+        status.sta_ipv4[0] = '\0';
+        status.sta_state = NEARBY_WEB_STA_DISCONNECTED;
+    } else if (status.sta_ipv4[0] != '\0') {
+        s_sta_state = NEARBY_WEB_STA_CONNECTED;
+        status.sta_state = NEARBY_WEB_STA_CONNECTED;
+    } else if (s_sta_state == NEARBY_WEB_STA_CONNECTING &&
+               s_sta_connect_started_us > 0 &&
+               esp_timer_get_time() - s_sta_connect_started_us >= WEB_STA_CONNECT_TIMEOUT_US) {
+        s_sta_state = NEARBY_WEB_STA_FAILED;
+        status.sta_state = NEARBY_WEB_STA_FAILED;
+    } else {
+        status.sta_state = s_sta_state;
+    }
+    status.sta_connected = status.sta_state == NEARBY_WEB_STA_CONNECTED;
     *out_status = status;
     return ESP_OK;
 }

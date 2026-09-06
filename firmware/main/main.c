@@ -115,6 +115,32 @@ static void update_db_status(void)
     nearby_ui_set_versions(status, app != NULL ? app->version : "unknown");
 }
 
+static void update_sta_status(void)
+{
+    nearby_web_mgmt_status_t status;
+    if (nearby_web_mgmt_get_status(&status) != ESP_OK) {
+        nearby_ui_set_sta_status(NEARBY_UI_STA_DISCONNECTED, NULL);
+        return;
+    }
+
+    nearby_ui_sta_state_t ui_state = NEARBY_UI_STA_DISCONNECTED;
+    switch (status.sta_state) {
+    case NEARBY_WEB_STA_CONNECTING:
+        ui_state = NEARBY_UI_STA_CONNECTING;
+        break;
+    case NEARBY_WEB_STA_CONNECTED:
+        ui_state = NEARBY_UI_STA_CONNECTED;
+        break;
+    case NEARBY_WEB_STA_FAILED:
+        ui_state = NEARBY_UI_STA_FAILED;
+        break;
+    case NEARBY_WEB_STA_DISCONNECTED:
+    default:
+        break;
+    }
+    nearby_ui_set_sta_status(ui_state, status.sta_ipv4);
+}
+
 static bool queue_owner_command(owner_command_type_t type,
                                 const char *entity_id,
                                 const char *service)
@@ -200,6 +226,7 @@ static void owner_start_portal(void)
                                   status.ap_ipv4[0] ? status.ap_ipv4 : "192.168.4.1",
                                   status.password);
     }
+    update_sta_status();
 }
 
 static void owner_stop_portal(void)
@@ -211,6 +238,7 @@ static void owner_stop_portal(void)
         }
     }
     nearby_ui_set_portal_info(false, NULL, NULL, NULL);
+    update_sta_status();
     update_db_status();
 }
 
@@ -305,8 +333,10 @@ static void product_owner_task(void *arg)
 
     /* Non-destructive only: missing/invalid SD/DB never prevents the product UI boot. */
     update_db_status();
+    update_sta_status();
     ESP_LOGI(TAG, "Product owner ready: boot is empty + idle; waiting for explicit Scan");
 
+    int64_t next_sta_refresh_us = 0;
     for (;;) {
         owner_command_t command;
         while (xQueueReceive(s_owner_queue, &command, 0) == pdTRUE) {
@@ -316,6 +346,12 @@ static void product_owner_task(void *arg)
         nearby_pipeline_event_t event;
         while (nearby_scan_pipeline_receive(&event, 0)) {
             owner_handle_pipeline_event(&event);
+        }
+
+        const int64_t now_us = esp_timer_get_time();
+        if (now_us >= next_sta_refresh_us) {
+            update_sta_status();
+            next_sta_refresh_us = now_us + 500000;
         }
 
         /* LVGL callbacks execute here, on the same task that owns all HA access. */

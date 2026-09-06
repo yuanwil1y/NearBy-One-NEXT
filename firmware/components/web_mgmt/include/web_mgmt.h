@@ -11,6 +11,13 @@
 extern "C" {
 #endif
 
+typedef enum {
+    NEARBY_WEB_STA_DISCONNECTED = 0,
+    NEARBY_WEB_STA_CONNECTING,
+    NEARBY_WEB_STA_CONNECTED,
+    NEARBY_WEB_STA_FAILED,
+} nearby_web_mgmt_sta_state_t;
+
 typedef struct {
     bool active;
     char ssid[33];
@@ -18,6 +25,7 @@ typedef struct {
     char ap_ipv4[16];
     char sta_ipv4[16];
     bool sta_connected;
+    nearby_web_mgmt_sta_state_t sta_state;
     bool db_format_authorized;
 } nearby_web_mgmt_status_t;
 

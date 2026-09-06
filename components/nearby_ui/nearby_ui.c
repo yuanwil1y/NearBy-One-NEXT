@@ -48,10 +48,13 @@ static struct {
     lv_obj_t *portal_modal;
     lv_obj_t *db_value_label;
     lv_obj_t *fw_value_label;
+    lv_obj_t *sta_value_label;
 
     char selected_device_id[HA_ID_LEN];
     char db_status[48];
     char firmware[32];
+    nearby_ui_sta_state_t sta_state;
+    char sta_ipv4[16];
     bool portal_running;
     char portal_ssid[48];
     char portal_address[32];
@@ -104,6 +107,7 @@ static void release_settings(void)
     g.portal_modal = NULL;
     g.db_value_label = NULL;
     g.fw_value_label = NULL;
+    g.sta_value_label = NULL;
     NB_OBJ_DELETE_ASYNC(screen);
 }
 
@@ -192,6 +196,8 @@ static lv_obj_t *make_icon_button(lv_obj_t *parent, const char *symbol)
     lv_obj_set_style_pad_all(button, 0, 0);
     lv_obj_t *label = lv_label_create(button);
     lv_label_set_text(label, symbol);
+    /* LVGL's built-in Montserrat 14 contains the official LV_SYMBOL glyphs. */
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(label, lv_color_white(), 0);
     lv_obj_center(label);
     return button;
@@ -446,6 +452,39 @@ static void render_portal_modal(void)
     lv_obj_add_event_cb(stop, portal_stop_clicked, LV_EVENT_CLICKED, NULL);
 }
 
+static void render_sta_value(void)
+{
+    if (!g.sta_value_label) return;
+
+    char value[48];
+    switch (g.sta_state) {
+    case NEARBY_UI_STA_CONNECTING:
+        safe_copy(value, sizeof(value), "Connecting");
+        break;
+    case NEARBY_UI_STA_CONNECTED:
+        if (g.sta_ipv4[0]) {
+            (void)snprintf(value, sizeof(value), "Connected\nIPv4: %s", g.sta_ipv4);
+        } else {
+            safe_copy(value, sizeof(value), "Connected");
+        }
+        break;
+    case NEARBY_UI_STA_FAILED:
+        safe_copy(value, sizeof(value), "Disconnected (failed)");
+        break;
+    case NEARBY_UI_STA_DISCONNECTED:
+    default:
+        safe_copy(value, sizeof(value), "Disconnected");
+        break;
+    }
+
+    lv_label_set_text(g.sta_value_label, value);
+    lv_obj_set_style_text_color(g.sta_value_label,
+                                g.sta_state == NEARBY_UI_STA_CONNECTED
+                                    ? lv_color_hex(NB_BLUE)
+                                    : lv_color_hex(NB_MUTED),
+                                0);
+}
+
 static void show_settings(void)
 {
     release_detail();
@@ -470,6 +509,15 @@ static void show_settings(void)
     lv_label_set_text(portal_label, "Web Management");
     lv_obj_center(portal_label);
     lv_obj_add_event_cb(portal, portal_start_clicked, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *sta_card = make_card(content, 68);
+    lv_obj_t *sta_title = lv_label_create(sta_card);
+    lv_label_set_text(sta_title, "Wi-Fi STA");
+    g.sta_value_label = lv_label_create(sta_card);
+    lv_obj_set_width(g.sta_value_label, 136);
+    lv_label_set_long_mode(g.sta_value_label, LV_LABEL_LONG_WRAP);
+    lv_obj_align(g.sta_value_label, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    render_sta_value();
 
     lv_obj_t *db_card = make_card(content, 58);
     lv_obj_t *db_title = lv_label_create(db_card);
@@ -511,6 +559,7 @@ void nearby_ui_init(const nearby_ui_callbacks_t *callbacks)
     if (callbacks) g.cb = *callbacks;
     safe_copy(g.db_status, sizeof(g.db_status), "Missing");
     safe_copy(g.firmware, sizeof(g.firmware), "unknown");
+    g.sta_state = NEARBY_UI_STA_DISCONNECTED;
     create_home();
     create_input_blocker();
     show_home();
@@ -582,4 +631,11 @@ void nearby_ui_set_portal_info(bool running, const char *ssid, const char *addre
     safe_copy(g.portal_address, sizeof(g.portal_address), address);
     safe_copy(g.portal_pin, sizeof(g.portal_pin), pin);
     if (g.portal_modal) render_portal_modal();
+}
+
+void nearby_ui_set_sta_status(nearby_ui_sta_state_t state, const char *ipv4)
+{
+    g.sta_state = state;
+    safe_copy(g.sta_ipv4, sizeof(g.sta_ipv4), ipv4);
+    render_sta_value();
 }
