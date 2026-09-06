@@ -256,7 +256,7 @@ static esp_err_t web_bench(void)
         (void)nearby_web_mgmt_stop();
         return err;
     }
-    ESP_LOGI(TAG, "SoftAP ssid=%s password=%s ip=%s", status.ssid, status.password, status.ap_ipv4);
+    ESP_LOGI(TAG, "SoftAP ssid=%s password=*** ip=%s", status.ssid, status.ap_ipv4);
     bench_log_resources("SoftAP/HTTP started");
     vTaskDelay(pdMS_TO_TICKS(120000));
     err = nearby_web_mgmt_stop();
