@@ -23,6 +23,10 @@ CONFIG_IEEE802154_ENABLED=y
 # buffer and LVGL heap remain bounded internal RAM; ESP32-C6 has no PSRAM
 # Kconfig path in ESP-IDF v6.1 and this configuration does not request one.
 CONFIG_LV_CONF_MINIMAL=y
+# LV_SYMBOL_* strings are UTF-8 FontAwesome codepoints. LV_CONF_MINIMAL defaults
+# text parsing to ASCII, which renders each 3-byte symbol as three placeholders.
+CONFIG_LV_TXT_ENC_UTF8=y
+CONFIG_LV_TXT_ENC_ASCII=n
 CONFIG_LV_COLOR_DEPTH_16=y
 CONFIG_LV_MEM_SIZE_KILOBYTES=32
 CONFIG_LV_DRAW_COMPLEX=y
