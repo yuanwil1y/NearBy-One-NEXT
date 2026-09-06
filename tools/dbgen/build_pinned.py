@@ -6,10 +6,11 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
-import time
 
 import full_dbgen
 import nearby_dbgen
+
+RELEASE_DB_LOGICAL_PATH = "artifacts/pinned/nearby.nbdb"
 
 
 def iter_flat_records(path: Path):
@@ -62,7 +63,6 @@ def main() -> None:
     build_epoch = int(pins["build_epoch"])
     out = Path(args.out)
 
-    t0 = time.perf_counter()
     build_summary = full_dbgen.build_database(
         ha_bluetooth=Path(args.ha_bluetooth),
         ha_zeroconf=Path(args.ha_zeroconf),
@@ -85,11 +85,8 @@ def main() -> None:
         db_version=2,
         build_epoch=build_epoch,
     )
-    build_ms = round((time.perf_counter() - t0) * 1000, 3)
 
-    t1 = time.perf_counter()
     validation = nearby_dbgen.validate_file(out, release=True)
-    validation_ms = round((time.perf_counter() - t1) * 1000, 3)
     if not validation["ok"]:
         raise SystemExit("release validation failed: " + "; ".join(validation["errors"]))
 
@@ -146,7 +143,7 @@ def main() -> None:
         "pins": pins,
         "generator": manifest.get("generator"),
         "db": {
-            "path": str(out),
+            "path": RELEASE_DB_LOGICAL_PATH,
             "bytes": out.stat().st_size,
             "sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
             "record_count": record_total,
@@ -165,7 +162,6 @@ def main() -> None:
             "by_record_type_runtime_keys": dict(sorted(record_counts.items())),
         },
         "extraction": manifest.get("extraction", {}),
-        "timing_ms": {"build": build_ms, "release_validation": validation_ms},
         "representative_lookups": lookup_smoke,
         "release_validation": {"ok": True, "errors": []},
         "build_command": (

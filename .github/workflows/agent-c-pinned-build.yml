@@ -1,4 +1,4 @@
-name: Agent C pinned recognition DB proof
+name: Agent C pinned recognition DB reproducibility
 
 on:
   push:
@@ -9,11 +9,13 @@ on:
       - tools/dbgen/*.py
       - tools/dbgen/pins.json
       - components/recognition_db/**
+      - artifacts/pinned/nearby.nbdb
       - docs/db/**
       - THIRD_PARTY.md
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   pinned-build:
@@ -21,7 +23,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent-c/device-database
           fetch-depth: 1
 
       - name: Read immutable pins
@@ -97,9 +98,11 @@ jobs:
       - name: Run host corruption and generator tests
         run: python -m unittest discover -s tools/dbgen -p 'test_*.py' -v
 
-      - name: Build and validate real pinned database
+      - name: Regenerate pinned database and report in temporary path
+        shell: bash
         run: |
-          mkdir -p artifacts/pinned
+          rm -rf /tmp/nearby-pinned-verify
+          mkdir -p /tmp/nearby-pinned-verify
           python tools/dbgen/build_pinned.py \
             --pins tools/dbgen/pins.json \
             --ha-bluetooth /tmp/nearby-ha/homeassistant/generated/bluetooth.py \
@@ -113,18 +116,62 @@ jobs:
             --zigbee-manufacturer-codes /tmp/nearby-zh/src/zspec/zcl/definition/manufacturerCode.ts \
             --zigbee-consts /tmp/nearby-zh/src/zspec/consts.ts \
             --matter-root /tmp/nearby-matter \
-            --out artifacts/pinned/nearby.nbdb \
-            --report docs/db/coverage-pinned.json
+            --out /tmp/nearby-pinned-verify/nearby.nbdb \
+            --report /tmp/nearby-pinned-verify/coverage-pinned.json
+
+      - name: Release preflight generated and committed databases
+        run: |
+          python tools/dbgen/preflight.py /tmp/nearby-pinned-verify/nearby.nbdb --release
           python tools/dbgen/preflight.py artifacts/pinned/nearby.nbdb --release
 
-      - name: Commit pinned proof to this branch
+      - name: Verify deterministic DB and report hashes
         shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add artifacts/pinned/nearby.nbdb docs/db/coverage-pinned.json
-          if git diff --cached --quiet; then
-            exit 0
+          echo "DB hashes:"
+          sha256sum /tmp/nearby-pinned-verify/nearby.nbdb artifacts/pinned/nearby.nbdb
+          if ! cmp -s /tmp/nearby-pinned-verify/nearby.nbdb artifacts/pinned/nearby.nbdb; then
+            echo "ERROR: regenerated nearby.nbdb differs from committed artifact" >&2
+            exit 1
           fi
-          git commit -m "Update expanded pinned recognition DB coverage proof"
-          git push origin HEAD:agent-c/device-database
+
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          import sys
+
+          generated_path = Path('/tmp/nearby-pinned-verify/coverage-pinned.json')
+          committed_path = Path('docs/db/coverage-pinned.json')
+
+          def deterministic_projection(path: Path) -> bytes:
+              value = json.loads(path.read_text(encoding='utf-8'))
+              # Legacy committed reports may contain host timing from the old
+              # auto-commit pipeline. Timing is not reproducibility metadata.
+              value.pop('timing_ms', None)
+              db = value.get('db')
+              if isinstance(db, dict):
+                  db['path'] = 'artifacts/pinned/nearby.nbdb'
+              return (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')) + '\n').encode('utf-8')
+
+          generated = deterministic_projection(generated_path)
+          committed = deterministic_projection(committed_path)
+          generated_sha = hashlib.sha256(generated).hexdigest()
+          committed_sha = hashlib.sha256(committed).hexdigest()
+          print(f'report deterministic sha256 generated={generated_sha}')
+          print(f'report deterministic sha256 committed={committed_sha}')
+          if generated != committed:
+              import difflib
+              gen_text = json.dumps(json.loads(generated), ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+              old_text = json.dumps(json.loads(committed), ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+              print('\n'.join(difflib.unified_diff(old_text, gen_text, fromfile='committed/coverage-pinned.json', tofile='regenerated/coverage-pinned.json')), file=sys.stderr)
+              raise SystemExit('ERROR: deterministic coverage report differs from committed artifact')
+          PY
+
+      - name: Assert verification did not modify tracked files
+        shell: bash
+        run: |
+          test -z "$(git status --porcelain)" || {
+            git status --short
+            echo "ERROR: reproducibility verification modified the checkout" >&2
+            exit 1
+          }
