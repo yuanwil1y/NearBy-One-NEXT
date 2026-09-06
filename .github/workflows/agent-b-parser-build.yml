@@ -1,4 +1,4 @@
-name: Agent B parsers + frozen D contract build
+name: Agent B parsers + frozen D/C integration build
 
 on:
   push:
@@ -16,13 +16,21 @@ permissions:
 
 env:
   AGENT_D_FROZEN_COMMIT: accdf91441d0abaf6a5d69aac31394465ab49b06
+  AGENT_C_FROZEN_COMMIT: 1fe26d3bc9b0e468534116e86dfa0964aae2ae1f
 
 jobs:
   host-parsers:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Agent B branch
+      - name: Checkout Agent B branch with history
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Prepare frozen Agent C typed recognition contract
+        run: |
+          git fetch origin "$AGENT_C_FROZEN_COMMIT"
+          rm -rf /tmp/nearby-agent-c-frozen
+          git worktree add --detach /tmp/nearby-agent-c-frozen "$AGENT_C_FROZEN_COMMIT"
       - name: Build and run pure BLE parser vectors
         run: |
           gcc -std=c11 -Wall -Wextra -Werror \
@@ -50,7 +58,7 @@ jobs:
             tests/host/test_ha_normalization.c \
             -o /tmp/test_ha_normalization
           /tmp/test_ha_normalization
-      - name: Verify bounded dedup and current C key contract
+      - name: Verify bounded dedup and exact matcher-key paths
         run: |
           gcc -std=c11 -Wall -Wextra -Werror \
             -Ifirmware/components/discovery_parser/include \
@@ -60,6 +68,21 @@ jobs:
             tests/host/test_dedup_matcher_keys.c \
             -o /tmp/test_dedup_matcher_keys
           /tmp/test_dedup_matcher_keys
+      - name: Verify B normalized facts against frozen C typed matcher implementation
+        run: |
+          python tests/host/build_b_to_c_fixture.py \
+            /tmp/nearby-agent-c-frozen/tools/dbgen \
+            /tmp/b-to-c-contract.nbdb
+          gcc -std=c11 -Wall -Wextra -Werror \
+            -I/tmp/nearby-agent-c-frozen/components/recognition_db/include \
+            -Ifirmware/components/discovery_parser/include \
+            firmware/components/discovery_parser/ble_ad_parser.c \
+            firmware/components/discovery_parser/recognition_adapter.c \
+            /tmp/nearby-agent-c-frozen/components/recognition_db/nearby_recognition_db.c \
+            /tmp/nearby-agent-c-frozen/components/recognition_db/nearby_recognition_match.c \
+            tests/host/test_b_to_c_contract.c \
+            -o /tmp/test_b_to_c_contract
+          /tmp/test_b_to_c_contract /tmp/b-to-c-contract.nbdb
       - name: Build and run Wi-Fi management vectors
         run: |
           gcc -std=c11 -Wall -Wextra -Werror \
@@ -102,6 +125,16 @@ jobs:
             tests/host/test_parser_fuzz.c \
             -o /tmp/test_parser_fuzz
           /tmp/test_parser_fuzz
+      - name: Verify fixed seven-slot scanner wiring has no NULL LAN runners
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror \
+            -Itests/host/fixtures/d_frozen/include \
+            -Ifirmware/components/discovery_parser/include \
+            -Ifirmware/components/scan_coordinator/include \
+            firmware/components/scan_coordinator/scan_default_runners.c \
+            tests/host/test_default_runner_wiring.c \
+            -o /tmp/test_default_runner_wiring
+          /tmp/test_default_runner_wiring
       - name: Build and run frozen-D coordinator vectors
         run: |
           gcc -std=c11 -Wall -Wextra -Werror \
@@ -120,11 +153,15 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
-      - name: Prepare frozen Agent D integration tree
+      - name: Prepare frozen Agent D + C integration tree
         run: |
+          git fetch origin "$AGENT_C_FROZEN_COMMIT"
+          rm -rf /tmp/nearby-agent-c-frozen
+          git worktree add --detach /tmp/nearby-agent-c-frozen "$AGENT_C_FROZEN_COMMIT"
           git clone --no-hardlinks . .integration-d
           git -C .integration-d checkout --detach "$AGENT_D_FROZEN_COMMIT"
           git -C .integration-d submodule update --init --recursive
+          cp -a /tmp/nearby-agent-c-frozen/components/recognition_db .integration-d/firmware/components/
           cp -a firmware/components/discovery_parser .integration-d/firmware/components/
           cp -a firmware/components/scan_coordinator .integration-d/firmware/components/
       - name: Build integrated default firmware with ESP-IDF v6.1
@@ -142,14 +179,18 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
-      - name: Prepare frozen Agent D integration tree
+      - name: Prepare frozen Agent D + C integration tree
         run: |
+          git fetch origin "$AGENT_C_FROZEN_COMMIT"
+          rm -rf /tmp/nearby-agent-c-frozen
+          git worktree add --detach /tmp/nearby-agent-c-frozen "$AGENT_C_FROZEN_COMMIT"
           git clone --no-hardlinks . .integration-d
           git -C .integration-d checkout --detach "$AGENT_D_FROZEN_COMMIT"
           git -C .integration-d submodule update --init --recursive
+          cp -a /tmp/nearby-agent-c-frozen/components/recognition_db .integration-d/firmware/components/
           cp -a firmware/components/discovery_parser .integration-d/firmware/components/
           cp -a firmware/components/scan_coordinator .integration-d/firmware/components/
-      - name: Build every D BENCH_REQUIRED path with B components on ESP-IDF v6.1
+      - name: Build every D BENCH_REQUIRED path with B + C on ESP-IDF v6.1
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v6.1
