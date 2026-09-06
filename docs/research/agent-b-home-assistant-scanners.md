@@ -1,201 +1,99 @@
-# Agent B 补充 — Home Assistant 原生扫描 / 发现模块
+# Agent B 补充 — Home Assistant discovery normalization 参考
 
-> Home Assistant 不只作为识别数据库和 Entity 模型来源，也作为 NearBy One NEXT discovery/scanner 层的一等参考源。重点复用其 Bluetooth、Zeroconf/mDNS、SSDP/UPnP、DHCP/LAN、HomeKit 和 Matter discovery 的工程化组织方式；ESP32-C6 只替换 Linux/Python/DBus/socket 等不可运行的底层 I/O。
+> 本文按 `main` 根 README 与本分支最新 `AGENTS.md` 重新收口。Home Assistant 是 B 的 discovery **字段/生命周期语义参考**，但 generated matcher tables、matcher indexing、integration/product recognition 已明确归 Agent C。旧版本中把 “HA matcher / matcher index” 当成 B runtime 职责的表述作废。
 
 ## 结论
 
-NearBy 的 scanner 层应优先输出 **HA-compatible discovery/service-info**，不要再发明独立 `ScannerRecord`：
+B 的目标链路是：
 
 ```text
-ESP-IDF scanner
-  -> HA-like ServiceInfo / Advertisement event
-  -> HA matcher
-  -> HA integration/parser
-  -> Device / Entity / State
+Agent D native observations
+  -> Agent B protocol parse
+  -> HA-compatible normalized discovery facts
+  -> Agent C recognition lookup
+  -> matched profile / parser_id
+  -> optional compiled B parser
+  -> Agent A semantic input
 ```
 
-HA 与其他参考项目的职责不同：Wireshark 是协议字段真值；hcxdumptool/Kismet/airodump 偏 raw 802.11 与 inventory；BtleJack/nRF Sniffer 偏 BLE 链路观察；**HA 强在 scanner orchestration + cache + matcher + discovery lifecycle + integration dispatch**。
+B 不生成最终产品 identity，不携带 HA generated matcher database，也不维护第二套 recognition table。
 
-## 1. Bluetooth
+## Bluetooth
 
-重点源码：
-
-```text
-homeassistant/components/bluetooth/
-  manager.py
-  api.py
-  match.py
-  models.py
-  passive_update_processor.py
-  active_update_processor.py
-  manifest.json
-```
-
-值得复刻：
-
-- advertisement/service info 数据边界
-- scanner registration / callback 模型
-- connectable 与 passive scanner 区分
-- discovered-service cache
-- matcher 调度
-- passive advertisement 持续更新 integration/entity 的模式
-
-ESP32 替换：
-
-```text
-Bleak / DBus / Linux adapter -> NimBLE / ESP-IDF GAP callbacks
-```
-
-HA Bluetooth matcher 字段直接沿用：
+参考 HA Bluetooth matcher 使用的字段语义：
 
 ```text
 local_name
-service_uuid
-service_data_uuid
-manufacturer_id
+service_uuid / service_uuids
+service_data_uuid / service_data
+manufacturer_id / manufacturer_data
 manufacturer_data_start
 connectable
 ```
 
-优先级：**A**。
+ESP32-C6 输入必须直接来自 D 冻结的 NimBLE legacy / extended handoff。B 负责：
 
-## 2. Zeroconf / mDNS / DNS-SD
+- AD structure bounds checking；
+- 16/32/128-bit UUID normalization；
+- service/manufacturer data bounded extraction；
+- local-name / flags / TX power / appearance；
+- 保留 RSSI/address/type/SID/PHY/data_status 等 native metadata；
+- 将 `INCOMPLETE` / `TRUNCATED` 作为 incomplete source，不擅自拼接链式报告；
+- 输出 typed matcher facts 给 C。
 
-重点源码：
+C 负责把这些 facts 对照 HA generated Bluetooth matcher 数据决定 `MATCHED / AMBIGUOUS / NOT_FOUND`。
+
+## Zeroconf / mDNS
+
+参考：
 
 ```text
 homeassistant/components/zeroconf/discovery.py
 homeassistant/generated/zeroconf.py
-script/hassfest/zeroconf.py
 ```
 
-`ZeroconfDiscovery` 已覆盖：
+B 负责解析/规范化 DNS-SD discovery facts：service type、instance、host、port、TXT、A/AAAA，以及 HomeKit/Matter service/TXT 字段。C 拥有 generated Zeroconf/HomeKit matcher knowledge 与最终 lookup。
 
-- service type browser
-- add/update/remove 生命周期
-- TXT properties
-- IPv4/IPv6 地址选择
-- wildcard/fnmatch matcher
-- HomeKit `_hap._tcp.local.` / `_hap._udp.local.`
-- HomeKit model lookup
-- discovery -> integration dispatch
+## SSDP
 
-NearBy 路径：
-
-```text
-ESP-IDF mDNS result
-  -> HA-like ZeroconfServiceInfo
-  -> HA generated matcher table
-  -> integration
-```
-
-优先级：**A**。
-
-## 3. SSDP / UPnP
-
-重点源码：
+参考：
 
 ```text
 homeassistant/components/ssdp/scanner.py
-homeassistant/components/ssdp/server.py
 homeassistant/components/ssdp/common.py
+homeassistant/generated/ssdp.py
 ```
 
-HA 当前 SSDP Scanner 已有：
+B 只做 bounded HTTPU message parse + case-insensitive header normalization，并输出 ST/NT/USN/SERVER/LOCATION/MAN/MX 及可观察 manufacturer/model hints。C 做 matcher indexing / recognition。
 
-- multicast + broadcast scan
-- advertisements
-- ALIVE / BYEBYE / UPDATE
-- device tracker
-- description cache
-- callback registration
-- integration matcher
-- case-insensitive headers
-- IPv4/IPv6 source handling
+## DHCP
 
-`IntegrationMatchers` 会对主要字段预索引，而不是每包遍历完整数据库。主要字段包括 manufacturer、ST、UPnP device type、NT、manufacturer URL。
-
-ESP32 路径：
+参考：
 
 ```text
-lwIP UDP/1900
-  -> SSDP headers
-  -> HA-like SsdpServiceInfo
-  -> HA IntegrationMatchers
-  -> integration
+homeassistant/components/dhcp/
+homeassistant/generated/dhcp.py
 ```
 
-优先级：**A/B**。
+B 输出 message type、chaddr/MAC、hostname、vendor class、client identifier 等合法 discovery facts。OUI/hostname matcher tables 与匹配结果归 C。
 
-## 4. DHCP / LAN host discovery
+## HomeKit / Matter
 
-重点源码：
+不另造 NearBy-specific scanner：
 
-```text
-homeassistant/components/dhcp/__init__.py
-homeassistant/components/dhcp/helpers.py
-homeassistant/components/dhcp/models.py
-```
+- HomeKit 主要复用 Zeroconf `_hap._tcp.local.` / `_hap._udp.local.` 发现事实；
+- Matter 主要复用 `_matter._tcp.local.` / `_matterc._udp.local.` 与 BLE commissioning service data；
+- VID/PID/discriminator 只有在协议中实际出现时才由 B 解析；
+- 产品 identity 仍交 C。
 
-HA DHCP discovery 实际组合多类 watcher，包括 DeviceTrackerWatcher、NetworkWatcher、DHCPWatcher、RediscoveryWatcher 等。
+## 当前优先级
 
-最值得 NearBy 直接复刻的是 matcher indexing：
+1. BLE legacy + extended AD parser。
+2. HA-compatible Bluetooth normalized facts -> C。
+3. Zeroconf/mDNS。
+4. SSDP。
+5. DHCP。
+6. complete-scan coordinator。
+7. Wi-Fi management / 802.15.4 / Zigbee / Matter incremental parsing。
 
-1. registered devices
-2. 无 OUI 的 hostname matcher
-3. 按 MAC OUI 分桶的 matcher
-
-NearBy 可将 DHCP、ARP/neighbour、mDNS/SSDP 补充得到的 MAC/IP/hostname 都喂进同一套 HA-compatible matcher。
-
-优先级：matcher/index **A**；HA 的具体 watcher runtime **B/C**。
-
-## 5. HomeKit / Matter
-
-不要另造 scanner。
-
-HomeKit 已由 HA Zeroconf 处理：
-
-```text
-_hap._tcp.local.
-_hap._udp.local.
-```
-
-Matter integration 的 discovery 也走 Zeroconf service：
-
-```text
-_matter._tcp.local.
-_matterc._udp.local.
-```
-
-NearBy 应使用 HA discovery 语义 + ESP-Matter 原生 API，而不是再写 NearBy 专属 Matter/HomeKit 扫描层。
-
-## 6. B 线更新后的优先级
-
-| 来源 | NearBy 中的角色 | 优先级 |
-|---|---|---|
-| HA Bluetooth | BLE discovery orchestration / matcher / passive update | **A** |
-| HA Zeroconf | mDNS/DNS-SD/HomeKit/Matter discovery | **A** |
-| HA SSDP | UPnP discovery / lifecycle / matcher index | **A/B** |
-| HA DHCP | LAN host aggregation / OUI+hostname matcher index | **A/B** |
-| hcxdumptool | raw 802.11 passive scan / IE parsing | **A** |
-| BtleJack | BLE packet/state reference | A/B |
-| Wireshark | protocol parser oracle | reference |
-| Kismet | Wi-Fi inventory/fingerprinting | reference |
-| airodump-ng | AP/station inventory | B/C |
-| Bettercap | recon lifecycle concepts | C |
-| Scapy | packet schema + PC test vectors | test/reference |
-| nRF Sniffer | BLE scanner behavior | reference |
-| Responder | LAN protocol identification only | C |
-
-## 7. 新原则
-
-在写任何新的 scanner glue 前，先检查 HA 是否已经定义：
-
-- ServiceInfo / Advertisement 数据形状
-- matcher
-- cache / dedup
-- add/update/remove 生命周期
-- scanner callback
-- integration dispatch
-
-如果 HA 已经有，就优先复刻其行为和字段；仅把底层输入替换为 ESP-IDF。
+不要从 vendor-specific decoder 批量移植开始；先稳定 `native -> normalized facts -> C` 边界。
