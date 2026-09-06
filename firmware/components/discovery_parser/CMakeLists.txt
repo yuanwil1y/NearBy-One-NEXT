@@ -6,6 +6,8 @@ idf_component_register(
         "mdns_parser.c"
         "ssdp_parser.c"
         "dhcp_parser.c"
+        "matcher_keys.c"
+        "transport_dedup.c"
     INCLUDE_DIRS "include"
     REQUIRES native_handoff radio_runtime scan_session bt
 )
