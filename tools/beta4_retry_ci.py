@@ -9,6 +9,14 @@ def replace_once(path, old, new):
     p.write_text(text.replace(old, new, 1))
 
 
+def replace_all_exact(path, old, new, expected):
+    p = Path(path)
+    text = p.read_text()
+    if text.count(old) != expected:
+        raise RuntimeError(f"{path}: expected {expected} matches for {old!r}, got {text.count(old)}")
+    p.write_text(text.replace(old, new))
+
+
 qa = ".github/workflows/qa-beta1-bench-fix.yml"
 replace_once(qa, "name: NearBy One NEXT beta.3 QA CI", "name: NearBy One NEXT beta.4 QA CI")
 replace_once(qa,
@@ -24,7 +32,7 @@ replace_once(qa,
         run: python tests/integration/test_beta3_qa_regressions.py
       - name: Guard beta.4 QA fixes
         run: python tests/integration/test_beta4_qa_regressions.py''')
-replace_once(qa, "NearBy-One-NEXT-ESP32C6-beta3-qa.bin", "NearBy-One-NEXT-ESP32C6-beta4-qa.bin")
+replace_all_exact(qa, "NearBy-One-NEXT-ESP32C6-beta3-qa.bin", "NearBy-One-NEXT-ESP32C6-beta4-qa.bin", 3)
 replace_once(qa, "nearby-one-next-beta3-qa-${{ github.sha }}", "nearby-one-next-beta4-qa-${{ github.sha }}")
 
 Path(".github/workflows/beta-release.yml").write_text(r'''name: NearBy One NEXT beta.4 release
