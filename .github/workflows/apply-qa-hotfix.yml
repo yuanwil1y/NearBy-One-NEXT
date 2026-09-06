@@ -1,0 +1,31 @@
+name: Apply staged beta.1 bench hotfix
+
+on:
+  push:
+    branches:
+      - qa/beta-0.1-bench-bugs
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: qa/beta-0.1-bench-bugs
+      - name: Apply deterministic source patch
+        run: python tools/qa/apply_beta1_bench_hotfix.py
+      - name: Commit source changes when needed
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "Hotfix already applied; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add firmware/main/nearby_lvgl_port.c firmware/main/agent_d_bench.c components/nearby_ui/nearby_ui.c firmware/sdkconfig.defaults
+          git commit -m "fix(qa): address beta.1 LCD and UI bench blockers"
+          git push origin HEAD:qa/beta-0.1-bench-bugs
