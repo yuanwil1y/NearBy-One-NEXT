@@ -4,9 +4,10 @@
 #include <stdio.h>
 #include <string.h>
 
-static size_t make_header(uint8_t *buf, uint16_t frame_control)
+static size_t make_header(uint8_t *buf, size_t cap, uint16_t frame_control)
 {
-    memset(buf, 0, 256);
+    assert(cap >= 24);
+    memset(buf, 0, cap);
     buf[0] = (uint8_t)frame_control;
     buf[1] = (uint8_t)(frame_control >> 8);
     for (unsigned i = 0; i < 6; ++i) {
@@ -20,7 +21,7 @@ static size_t make_header(uint8_t *buf, uint16_t frame_control)
 static void test_beacon(void)
 {
     uint8_t frame[256];
-    size_t p = make_header(frame, 0x0080u);
+    size_t p = make_header(frame, sizeof(frame), 0x0080u);
     memset(frame + p, 0, 8);
     p += 8;
     frame[p++] = 0x64;
@@ -55,7 +56,7 @@ static void test_beacon(void)
 static void test_probe_request_hidden_ssid(void)
 {
     uint8_t frame[64];
-    size_t p = make_header(frame, 0x0040u);
+    size_t p = make_header(frame, sizeof(frame), 0x0040u);
     frame[p++] = 0;
     frame[p++] = 0;
     nearby_wifi_mgmt_facts_t facts;
@@ -67,7 +68,7 @@ static void test_probe_request_hidden_ssid(void)
 static void test_unsupported_data_frame(void)
 {
     uint8_t frame[32];
-    const size_t p = make_header(frame, 0x0008u);
+    const size_t p = make_header(frame, sizeof(frame), 0x0008u);
     nearby_wifi_mgmt_facts_t facts;
     assert(nearby_wifi_parse_management_frame(frame, p, false, &facts) == NEARBY_WIFI_PARSE_UNSUPPORTED);
 }
@@ -75,7 +76,7 @@ static void test_unsupported_data_frame(void)
 static void test_truncated_ie_policy(void)
 {
     uint8_t frame[64];
-    size_t p = make_header(frame, 0x0040u);
+    size_t p = make_header(frame, sizeof(frame), 0x0040u);
     frame[p++] = 0;
     frame[p++] = 5;
     frame[p++] = 'A';
@@ -88,7 +89,7 @@ static void test_truncated_ie_policy(void)
 static void test_invalid_ssid_length(void)
 {
     uint8_t frame[96];
-    size_t p = make_header(frame, 0x0040u);
+    size_t p = make_header(frame, sizeof(frame), 0x0040u);
     frame[p++] = 0;
     frame[p++] = 33;
     memset(frame + p, 'x', 33);
@@ -100,7 +101,7 @@ static void test_invalid_ssid_length(void)
 static void test_vendor_overflow_is_partial(void)
 {
     uint8_t frame[128];
-    size_t p = make_header(frame, 0x0040u);
+    size_t p = make_header(frame, sizeof(frame), 0x0040u);
     for (unsigned i = 0; i < NEARBY_WIFI_MAX_VENDOR_IES + 1u; ++i) {
         frame[p++] = 221;
         frame[p++] = 3;
