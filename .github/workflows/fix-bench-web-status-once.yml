@@ -1,0 +1,39 @@
+name: One-shot web bench status fixer
+
+on:
+  push:
+    branches:
+      - qa/beta4-retry-2
+    paths:
+      - .github/workflows/fix-bench-web-status-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repair stale password status reference
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('firmware/main/agent_d_bench.c')
+          text = path.read_text()
+          old = '    ESP_LOGI(TAG, "SoftAP ssid=%s password=%s ip=%s", status.ssid, status.password, status.ap_ipv4);'
+          new = '    ESP_LOGI(TAG, "SoftAP ssid=%s password=*** ip=%s", status.ssid, status.ap_ipv4);'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one stale web bench log line, found {text.count(old)}')
+          path.write_text(text.replace(old, new))
+          PY
+      - name: Commit repaired bench and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-bench-web-status-once.yml
+          git add firmware/main/agent_d_bench.c
+          git diff --cached --check
+          git commit -m "fix(bench): stop referencing removed SoftAP password field"
+          git push origin HEAD:qa/beta4-retry-2
