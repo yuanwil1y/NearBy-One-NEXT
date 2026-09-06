@@ -22,7 +22,11 @@ ZEROCONF = {
     "_demo._tcp.local.": [
         {"domain":"zc_demo","name":"demo-*","properties":{"model":"x*","id":"42"}},
         {"domain":"zc_other","properties":{"model":"other"}},
-    ]
+    ],
+    "_amb._tcp.local.": [
+        {"domain":"zc_amb_a","properties":{"model":"amb*"}},
+        {"domain":"zc_amb_b","properties":{"model":"amb*"}},
+    ],
 }
 '''
 
@@ -35,6 +39,8 @@ HA_SSDP = '''SSDP = {
 HA_DHCP = '''DHCP = [
     {"domain":"dhcp_demo","hostname":"demo-*","macaddress":"AABBCC*"},
     {"domain":"dhcp_other","hostname":"other-*"},
+    {"domain":"dhcp_amb_a","hostname":"amb-*","macaddress":"DDEEFF*"},
+    {"domain":"dhcp_amb_b","hostname":"amb-*","macaddress":"DDEEFF*"},
 ]
 '''
 
