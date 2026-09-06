@@ -72,6 +72,7 @@ static void on_event(const nearby_scan_event_t *event, void *ctx)
 static nearby_scan_module_outcome_t ok_runner(void *ctx)
 {
     int *calls = ctx;
+    assert(owner); /* The one D gate must remain held inside every module. */
     ++*calls;
     return (nearby_scan_module_outcome_t){NEARBY_SCAN_MODULE_COMPLETE, ESP_OK};
 }
@@ -79,6 +80,7 @@ static nearby_scan_module_outcome_t ok_runner(void *ctx)
 static nearby_scan_module_outcome_t soft_fail_runner(void *ctx)
 {
     int *calls = ctx;
+    assert(owner);
     ++*calls;
     return (nearby_scan_module_outcome_t){NEARBY_SCAN_MODULE_ERROR, ESP_ERR_NOT_FOUND};
 }
@@ -117,7 +119,37 @@ static void test_real_terminal_progress(void)
     assert(last_event.progress_percent == 100);
 }
 
-static void test_fixed_run_and_soft_error(void)
+static void test_one_scan_traverses_all_enabled_modules_under_one_gate(void)
+{
+    reset_stubs();
+    nearby_scan_coordinator_t c;
+    nearby_scan_coordinator_init(&c, on_event, NULL);
+    int calls = 0;
+    nearby_scan_runners_t runners = {
+        .wifi_active = ok_runner,
+        .wifi_management = ok_runner,
+        .zeroconf = ok_runner,
+        .ssdp = ok_runner,
+        .dhcp = ok_runner,
+        .ble = ok_runner,
+        .ieee802154 = ok_runner,
+        .ctx = &calls,
+    };
+    assert(nearby_scan_coordinator_run(&c, NEARBY_SCAN_ALL_MODULES_MASK, 10, &runners) == ESP_OK);
+    assert(calls == NEARBY_SCAN_MODULE_COUNT);
+    assert(begin_calls == 1);
+    assert(cleanup_calls == 1);
+    assert(end_calls == 1);
+    assert(!owner && !c.gate_held);
+    assert(c.enabled_count == NEARBY_SCAN_MODULE_COUNT);
+    assert(c.terminal_count == NEARBY_SCAN_MODULE_COUNT);
+    assert(nearby_scan_coordinator_progress(&c) == 100);
+    for (unsigned i = 0; i < NEARBY_SCAN_MODULE_COUNT; ++i) {
+        assert(c.module_status[i] == NEARBY_SCAN_MODULE_COMPLETE);
+    }
+}
+
+static void test_soft_error_is_terminal_and_does_not_fake_progress(void)
 {
     reset_stubs();
     nearby_scan_coordinator_t c;
@@ -129,12 +161,10 @@ static void test_fixed_run_and_soft_error(void)
         .ctx = &calls,
     };
     const uint32_t mask = NEARBY_SCAN_MODULE_BIT(NEARBY_SCAN_MODULE_SSDP) |
-                          NEARBY_SCAN_MODULE_BIT(NEARBY_SCAN_MODULE_BLE) |
-                          NEARBY_SCAN_MODULE_BIT(NEARBY_SCAN_MODULE_DHCP);
+                          NEARBY_SCAN_MODULE_BIT(NEARBY_SCAN_MODULE_BLE);
     assert(nearby_scan_coordinator_run(&c, mask, 10, &runners) == ESP_OK);
-    assert(calls == 2); /* DHCP has no runner and is deliberately skipped. */
+    assert(calls == 2);
     assert(c.module_status[NEARBY_SCAN_MODULE_SSDP] == NEARBY_SCAN_MODULE_ERROR);
-    assert(c.module_status[NEARBY_SCAN_MODULE_DHCP] == NEARBY_SCAN_MODULE_SKIPPED);
     assert(c.module_status[NEARBY_SCAN_MODULE_BLE] == NEARBY_SCAN_MODULE_COMPLETE);
     assert(nearby_scan_coordinator_first_module_error(&c) == ESP_ERR_NOT_FOUND);
     assert(nearby_scan_coordinator_progress(&c) == 100);
@@ -177,7 +207,8 @@ static void test_gate_acquire_failure_is_idle(void)
 int main(void)
 {
     test_real_terminal_progress();
-    test_fixed_run_and_soft_error();
+    test_one_scan_traverses_all_enabled_modules_under_one_gate();
+    test_soft_error_is_terminal_and_does_not_fake_progress();
     test_fatal_cleanup_holds_gate_until_recovery();
     test_gate_acquire_failure_is_idle();
     puts("scan coordinator host tests: OK");
