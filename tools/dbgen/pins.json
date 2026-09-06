@@ -1,0 +1,59 @@
+{
+  "build_epoch": 1788634001,
+  "home_assistant_core": {
+    "repository": "home-assistant/core",
+    "revision": "2a1c7d1a864ed7cf9f6fb16c8a0ece7d01e16d48",
+    "source_paths": [
+      "homeassistant/generated/bluetooth.py",
+      "homeassistant/generated/zeroconf.py",
+      "homeassistant/generated/ssdp.py",
+      "homeassistant/generated/dhcp.py"
+    ],
+    "license_spdx": "Apache-2.0"
+  },
+  "zha_device_handlers": {
+    "repository": "zigpy/zha-device-handlers",
+    "revision": "6a3822c1348f9e40ad243eb881084a1c075da277",
+    "source_path": "zhaquirks",
+    "license_spdx": "Apache-2.0"
+  },
+  "zigbee_herdsman_converters": {
+    "repository": "Koenkk/zigbee-herdsman-converters",
+    "revision": "cf6e6596facaf36cc850e4e904f55748492ce13d",
+    "source_path": "src/devices",
+    "license_spdx": "MIT"
+  },
+  "bluetooth_numbers_nordic": {
+    "repository": "nordicsemi/bluetooth-numbers-database",
+    "revision": "d379cc06c9c3681bc1c1cd4d61c246a0b0f80b0e",
+    "source_paths": [
+      "v1/company_ids.json",
+      "v1/service_uuids.json"
+    ],
+    "license_spdx": "BSD-3-Clause"
+  },
+  "zigbee_herdsman_defs": {
+    "repository": "Koenkk/zigbee-herdsman",
+    "revision": "467b2842776b84f2deb8a095a500d64a12acf5ed",
+    "source_paths": [
+      "src/zspec/zcl/definition/manufacturerCode.ts",
+      "src/zspec/consts.ts"
+    ],
+    "license_spdx": "MIT"
+  },
+  "smartthings_matter_fingerprints": {
+    "repository": "SmartThingsCommunity/SmartThingsEdgeDrivers",
+    "revision": "f46b6470978a6736ce634e01d054835a919d9284",
+    "source_paths": [
+      "drivers/SmartThings/matter-appliance/fingerprints.yml",
+      "drivers/SmartThings/matter-lock/fingerprints.yml",
+      "drivers/SmartThings/matter-rvc/fingerprints.yml",
+      "drivers/SmartThings/matter-sensor/fingerprints.yml",
+      "drivers/SmartThings/matter-switch/fingerprints.yml",
+      "drivers/SmartThings/matter-thermostat/fingerprints.yml",
+      "drivers/SmartThings/matter-window-covering/fingerprints.yml"
+    ],
+    "license_spdx": "Apache-2.0",
+    "catalog_semantics": "integration_fingerprint_not_authoritative_assignment_registry"
+  }
+}
