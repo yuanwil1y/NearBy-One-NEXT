@@ -83,24 +83,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: ESP-IDF v6.1 esp32c6 default build
+      - name: ESP-IDF v6.1 esp32c6 default build and two-file release package
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v6.1
           target: esp32c6
           path: firmware
-      - name: Upload flashable default artifacts
+          command: >-
+            idf.py build &&
+            mkdir -p ../release &&
+            cd build &&
+            esptool --chip esp32c6 merge-bin -o ../../release/NearBy-One-NEXT-ESP32C6.bin @flash_args &&
+            cd .. &&
+            cp ../artifacts/pinned/nearby.nbdb ../release/NearBy-One-NEXT.nbdb
+      - name: Upload final two-file release
         uses: actions/upload-artifact@v4
         with:
-          name: nearby-one-next-esp32c6-flashable-${{ github.sha }}
+          name: nearby-one-next-release-${{ github.sha }}
           if-no-files-found: error
           path: |
-            firmware/build/bootloader/bootloader.bin
-            firmware/build/partition_table/partition-table.bin
-            firmware/build/nearby_one_next.bin
-            firmware/build/flash_args
-            firmware/build/flash_project_args
-            firmware/build/flasher_args.json
+            release/NearBy-One-NEXT-ESP32C6.bin
+            release/NearBy-One-NEXT.nbdb
 
   build-all-benches:
     runs-on: ubuntu-latest
