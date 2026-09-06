@@ -142,6 +142,22 @@ int main(int argc, char **argv) {
         NEARBY_DB_MATCH_NOT_FOUND,
         0);
 
+    nearby_db_kv_t zc_amb_props[] = {
+        {TXT("model"), TXT("amb100")},
+    };
+    nearby_db_zeroconf_facts_t zc_amb = {
+        .service_type = TXT("_amb._tcp.local."),
+        .name = TXT("amb-device._amb._tcp.local."),
+        .properties = zc_amb_props,
+        .property_count = 1,
+    };
+    failed |= expect_query(
+        "zeroconf multiple domains fail closed",
+        nearby_db_match_zeroconf(&db, &zc_amb, &workspace, &result),
+        &result,
+        NEARBY_DB_MATCH_AMBIGUOUS,
+        2);
+
     nearby_db_kv_t ssdp_fields[] = {
         {TXT("ST"), TXT("urn:demo:1")},
         {TXT("manufacturer"), TXT("Acme")},
@@ -199,6 +215,14 @@ int main(int argc, char **argv) {
         &result,
         NEARBY_DB_MATCHED,
         1);
+    dhcp.hostname = TXT("amb-one");
+    dhcp.macaddress = TXT("DDEEFF112233");
+    failed |= expect_query(
+        "dhcp multiple domains fail closed",
+        nearby_db_match_dhcp(&db, &dhcp, &workspace, &result),
+        &result,
+        NEARBY_DB_MATCH_AMBIGUOUS,
+        2);
 
     unsigned char tiny_scratch[16];
     nearby_db_match_workspace_t tiny_workspace = {tiny_scratch, sizeof(tiny_scratch)};
