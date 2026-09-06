@@ -170,8 +170,8 @@ jobs:
       - name: Assert verification did not modify tracked files
         shell: bash
         run: |
-          test -z "$(git status --porcelain)" || {
-            git status --short
-            echo "ERROR: reproducibility verification modified the checkout" >&2
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            git status --short --untracked-files=no
+            echo "ERROR: reproducibility verification modified tracked checkout files" >&2
             exit 1
-          }
+          fi
