@@ -5,6 +5,7 @@
 
 #include "nearby_ble_discovery.h"
 #include "nearby_lan_discovery.h"
+#include "nearby_wifi_discovery.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,6 +32,8 @@ typedef struct {
     nearby_dedup_table_t mdns;
     nearby_dedup_table_t ssdp;
     nearby_dedup_table_t dhcp;
+    nearby_dedup_table_t wifi_active;
+    nearby_dedup_table_t wifi_passive;
 } nearby_scan_dedup_t;
 
 void nearby_scan_dedup_reset(nearby_scan_dedup_t *state, uint32_t generation);
@@ -44,6 +47,11 @@ bool nearby_ssdp_dedup_should_emit(nearby_scan_dedup_t *state,
                                    const nearby_ssdp_facts_t *facts);
 bool nearby_dhcp_dedup_should_emit(nearby_scan_dedup_t *state,
                                    const nearby_dhcp_facts_t *facts);
+bool nearby_wifi_active_dedup_should_emit(nearby_scan_dedup_t *state,
+                                         const nearby_wifi_active_facts_t *facts);
+bool nearby_wifi_passive_dedup_should_emit(
+    nearby_scan_dedup_t *state,
+    const nearby_wifi_passive_normalized_t *observation);
 
 #ifdef __cplusplus
 }
