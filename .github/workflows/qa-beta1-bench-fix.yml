@@ -1,4 +1,4 @@
-name: NearBy One NEXT beta.1 bench bugfix CI
+name: NearBy One NEXT beta.3 QA CI
 
 on:
   push:
@@ -14,8 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Guard the three reported bench fixes
+      - name: Guard previously fixed bench regressions
         run: python tests/integration/test_beta1_bench_regressions.py
+      - name: Guard beta.3 QA fixes
+        run: python tests/integration/test_beta3_qa_regressions.py
 
   host-a:
     runs-on: ubuntu-latest
@@ -98,22 +100,23 @@ jobs:
           path: firmware
           command: >-
             idf.py build &&
+            grep -q '^CONFIG_LV_TXT_ENC_UTF8=y$' sdkconfig &&
             grep -q "lv_font_montserrat_14" build/nearby_one_next.map &&
             idf.py size &&
             mkdir -p ../qa-release &&
             cd build &&
-            esptool --chip esp32c6 merge-bin -o ../../qa-release/NearBy-One-NEXT-ESP32C6-beta1-bench-fix.bin @flash_args &&
+            esptool --chip esp32c6 merge-bin -o ../../qa-release/NearBy-One-NEXT-ESP32C6-beta3-qa.bin @flash_args &&
             cd .. &&
             cp ../artifacts/pinned/nearby.nbdb ../qa-release/NearBy-One-NEXT.nbdb &&
-            echo "merged_bin_bytes=$(wc -c < ../qa-release/NearBy-One-NEXT-ESP32C6-beta1-bench-fix.bin)" &&
+            echo "merged_bin_bytes=$(wc -c < ../qa-release/NearBy-One-NEXT-ESP32C6-beta3-qa.bin)" &&
             echo "app_bin_bytes=$(wc -c < build/nearby_one_next.bin)"
       - name: Upload physical-retest package
         uses: actions/upload-artifact@v4
         with:
-          name: nearby-one-next-beta1-bench-fix-${{ github.sha }}
+          name: nearby-one-next-beta3-qa-${{ github.sha }}
           if-no-files-found: error
           path: |
-            qa-release/NearBy-One-NEXT-ESP32C6-beta1-bench-fix.bin
+            qa-release/NearBy-One-NEXT-ESP32C6-beta3-qa.bin
             qa-release/NearBy-One-NEXT.nbdb
 
   build-all-benches:
