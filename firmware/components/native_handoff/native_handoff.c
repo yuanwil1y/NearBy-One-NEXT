@@ -254,10 +254,8 @@ static void queue_extended_disc(const struct ble_gap_ext_disc_desc *desc)
     nearby_ble_ext_disc_record_t *slot = &s_ble_ext_slots[slot_index];
     slot->desc = *desc;
     slot->original_length_data = desc->length_data;
-    const uint16_t copied_len = desc->length_data > NEARBY_BLE_EXT_DATA_MAX
-                                    ? NEARBY_BLE_EXT_DATA_MAX
-                                    : desc->length_data;
-    slot->truncated = copied_len != desc->length_data;
+    const uint8_t copied_len = desc->length_data;
+    slot->truncated = false;
 
     if (copied_len > 0 && desc->data != NULL) {
         memcpy(slot->data, desc->data, copied_len);
@@ -268,7 +266,7 @@ static void queue_extended_disc(const struct ble_gap_ext_disc_desc *desc)
      * remain separate records; D deliberately does not perform reassembly.
      */
     slot->desc.data = slot->data;
-    slot->desc.length_data = (uint8_t)copied_len;
+    slot->desc.length_data = copied_len;
 
     if (xQueueSend(s_ble_ext_ready_q, &slot_index, 0) != pdTRUE) {
         (void)xQueueSend(s_ble_ext_free_q, &slot_index, 0);
