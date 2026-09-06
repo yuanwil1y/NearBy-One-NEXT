@@ -33,6 +33,12 @@ esp_err_t nearby_wifi_active_scan_run(
     memset(stats, 0, sizeof(*stats));
     memset(s_active_records, 0, sizeof(s_active_records));
 
+    /*
+     * If D already owns a live STA/netif for this scan session, active discovery
+     * must not tear it down before LAN modules consume that native lwIP path.
+     * A driver created only for this module is still cleaned up here.
+     */
+    const bool driver_was_started = nearby_wifi_driver_is_started();
     uint16_t count = NEARBY_WIFI_ACTIVE_RECORD_MAX;
     esp_err_t first_error = nearby_wifi_active_scan(s_active_records, &count,
                                                     config->show_hidden);
@@ -57,7 +63,9 @@ esp_err_t nearby_wifi_active_scan_run(
             }
         }
     }
-    remember_error(nearby_wifi_driver_deinit(), &first_error);
+    if (!driver_was_started) {
+        remember_error(nearby_wifi_driver_deinit(), &first_error);
+    }
     return first_error;
 }
 
@@ -184,9 +192,10 @@ esp_err_t nearby_wifi_passive_scan_run(
                 break;
             }
             if (!consumed) {
-                const TickType_t elapsed = (TickType_t)(xTaskGetTickCount() - start);
-                const TickType_t remaining = elapsed < dwell_ticks
-                                                 ? dwell_ticks - elapsed : 0;
+                const TickType_t elapsed_ticks =
+                    (TickType_t)(xTaskGetTickCount() - start);
+                const TickType_t remaining = elapsed_ticks < dwell_ticks
+                                                 ? dwell_ticks - elapsed_ticks : 0;
                 if (remaining == 0) break;
                 vTaskDelay(poll_ticks < remaining ? poll_ticks : remaining);
             }
