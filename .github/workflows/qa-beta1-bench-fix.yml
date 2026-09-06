@@ -1,9 +1,10 @@
-name: NearBy One NEXT beta.3 QA CI
+name: NearBy One NEXT beta.4 QA CI
 
 on:
   push:
     branches:
       - qa/beta-0.1-bench-bugs
+      - qa/beta4-retry-2
   workflow_dispatch:
 
 permissions:
@@ -18,6 +19,8 @@ jobs:
         run: python tests/integration/test_beta1_bench_regressions.py
       - name: Guard beta.3 QA fixes
         run: python tests/integration/test_beta3_qa_regressions.py
+      - name: Guard beta.4 QA fixes
+        run: python tests/integration/test_beta4_qa_regressions.py
 
   host-a:
     runs-on: ubuntu-latest
@@ -50,7 +53,7 @@ jobs:
           gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/components/discovery_parser/include firmware/components/discovery_parser/mdns_parser.c firmware/components/discovery_parser/dhcp_parser.c tests/host/test_ha_normalization.c -o /tmp/test_ha_norm && /tmp/test_ha_norm
       - name: Dedup and exact matcher keys
         run: |
-          gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/components/discovery_parser/include -Itests/host/fixtures/c_current firmware/components/discovery_parser/matcher_keys.c firmware/components/discovery_parser/transport_dedup.c tests/host/test_dedup_matcher_keys.c -o /tmp/test_dedup && /tmp/test_dedup
+          gcc -std=c11 -Wall -Wextra -Werror -Itests/host/fixtures/c_current -Ifirmware/components/discovery_parser/include -Ifirmware/components/scan_coordinator/include firmware/components/discovery_parser/matcher_keys.c firmware/components/discovery_parser/transport_dedup.c tests/host/test_dedup_matcher_keys.c -o /tmp/test_dedup && /tmp/test_dedup
       - name: B to integrated C typed recognition contract
         run: |
           python tests/host/build_b_to_c_fixture.py tools/dbgen /tmp/b-to-c-contract.nbdb
@@ -105,18 +108,18 @@ jobs:
             idf.py size &&
             mkdir -p ../qa-release &&
             cd build &&
-            esptool --chip esp32c6 merge-bin -o ../../qa-release/NearBy-One-NEXT-ESP32C6-beta3-qa.bin @flash_args &&
+            esptool --chip esp32c6 merge-bin -o ../../qa-release/NearBy-One-NEXT-ESP32C6-beta4-qa.bin @flash_args &&
             cd .. &&
             cp ../artifacts/pinned/nearby.nbdb ../qa-release/NearBy-One-NEXT.nbdb &&
-            echo "merged_bin_bytes=$(wc -c < ../qa-release/NearBy-One-NEXT-ESP32C6-beta3-qa.bin)" &&
+            echo "merged_bin_bytes=$(wc -c < ../qa-release/NearBy-One-NEXT-ESP32C6-beta4-qa.bin)" &&
             echo "app_bin_bytes=$(wc -c < build/nearby_one_next.bin)"
       - name: Upload physical-retest package
         uses: actions/upload-artifact@v4
         with:
-          name: nearby-one-next-beta3-qa-${{ github.sha }}
+          name: nearby-one-next-beta4-qa-${{ github.sha }}
           if-no-files-found: error
           path: |
-            qa-release/NearBy-One-NEXT-ESP32C6-beta3-qa.bin
+            qa-release/NearBy-One-NEXT-ESP32C6-beta4-qa.bin
             qa-release/NearBy-One-NEXT.nbdb
 
   build-all-benches:
