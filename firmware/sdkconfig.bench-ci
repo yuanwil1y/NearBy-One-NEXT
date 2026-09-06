@@ -1,9 +1,7 @@
 # Compile-only coverage for Agent D BENCH_REQUIRED code paths.
 # This file is used by CI only; no hardware is flashed or executed.
-# The all-bench binary intentionally compiles every harness path at once and
-# therefore exceeds the default 1 MiB factory partition. Use ESP-IDF's built-in
-# large single-app table for this CI-only configuration.
-CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+# Partition/flash sizing is inherited from sdkconfig.defaults so bench and
+# production cannot diverge back to ESP-IDF's 1500 KiB single-app table.
 CONFIG_NEARBY_AGENT_D_RADIO_SMOKE=y
 CONFIG_NEARBY_AGENT_D_BOARD_IO_SMOKE=y
 CONFIG_NEARBY_AGENT_D_LCD_VISUAL_BENCH=y
