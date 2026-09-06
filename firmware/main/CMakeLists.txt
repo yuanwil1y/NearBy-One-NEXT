@@ -1,6 +1,7 @@
 set(agent_d_srcs
     "main.c"
     "nearby_semantic_apply.c"
+    "nearby_scan_pipeline.c"
 )
 set(agent_d_requires
     nearby_board
@@ -11,6 +12,9 @@ set(agent_d_requires
     esp_timer
     web_mgmt
     ha_core
+    recognition_db
+    discovery_parser
+    scan_coordinator
 )
 
 if(CONFIG_NEARBY_AGENT_D_LCD_VISUAL_BENCH OR
