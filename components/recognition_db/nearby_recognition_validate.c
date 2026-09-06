@@ -226,6 +226,17 @@ static bool source_policy_valid(const token_matcher_t required[6],
     return allowed->count == 1u;
 }
 
+static void feed_top_level_token(token_matcher_t *matcher,
+                                 bool can_start,
+                                 uint8_t ch)
+{
+    if (matcher->matched > 0u || can_start) {
+        (void)token_feed(matcher, ch);
+    } else {
+        matcher->matched = 0u;
+    }
+}
+
 static nearby_db_result_t manifest_release_validate(FILE *fp,
                                                     uint64_t offset,
                                                     uint64_t length,
@@ -255,10 +266,15 @@ static nearby_db_result_t manifest_release_validate(FILE *fp,
 
     bool sources_started = false;
     bool array_closed = false;
-    bool in_string = false;
-    bool escape = false;
-    unsigned object_depth = 0u;
+    bool source_in_string = false;
+    bool source_escape = false;
+    unsigned source_object_depth = 0u;
     uint32_t object_count = 0u;
+
+    bool json_in_string = false;
+    bool json_escape = false;
+    unsigned json_object_depth = 0u;
+    unsigned json_array_depth = 0u;
 
     if (!seek_abs(fp, offset)) return NEARBY_DB_ERR_IO;
     uint64_t remaining = length;
@@ -269,60 +285,99 @@ static nearby_db_result_t manifest_release_validate(FILE *fp,
 
         for (size_t i = 0; i < take; ++i) {
             const uint8_t ch = s_stream[i];
-            (void)token_feed(&container, ch);
-            (void)token_feed(&schema, ch);
 
             if (!sources_started) {
-                if (token_feed(&sources, ch)) {
-                    sources_started = true;
-                    in_string = false;
-                    escape = false;
+                const bool can_start = !json_in_string &&
+                                       json_object_depth == 1u &&
+                                       json_array_depth == 0u;
+                feed_top_level_token(&container, can_start, ch);
+                feed_top_level_token(&schema, can_start, ch);
+                if (sources.matched > 0u || can_start) {
+                    if (token_feed(&sources, ch)) {
+                        sources_started = true;
+                        source_in_string = false;
+                        source_escape = false;
+                        source_object_depth = 0u;
+                        object_count = 0u;
+                        source_policy_reset(required, &allowed);
+                        continue;
+                    }
+                } else {
+                    sources.matched = 0u;
+                }
+
+                if (json_in_string) {
+                    if (json_escape) {
+                        json_escape = false;
+                    } else if (ch == (uint8_t)'\\') {
+                        json_escape = true;
+                    } else if (ch == (uint8_t)'"') {
+                        json_in_string = false;
+                    }
+                    continue;
+                }
+                if (ch == (uint8_t)'"') {
+                    json_in_string = true;
+                    continue;
+                }
+                if (ch == (uint8_t)'{') {
+                    ++json_object_depth;
+                } else if (ch == (uint8_t)'}') {
+                    if (json_object_depth == 0u) return NEARBY_DB_ERR_FORMAT;
+                    --json_object_depth;
+                } else if (ch == (uint8_t)'[') {
+                    ++json_array_depth;
+                } else if (ch == (uint8_t)']') {
+                    if (json_array_depth == 0u) return NEARBY_DB_ERR_FORMAT;
+                    --json_array_depth;
                 }
                 continue;
             }
+
             if (array_closed) continue;
 
-            if (object_depth > 0u) {
+            if (source_object_depth > 0u) {
                 for (size_t t = 0; t < 6u; ++t) (void)token_feed(&required[t], ch);
                 (void)token_feed(&allowed, ch);
             }
 
-            if (in_string) {
-                if (escape) {
-                    escape = false;
+            if (source_in_string) {
+                if (source_escape) {
+                    source_escape = false;
                 } else if (ch == (uint8_t)'\\') {
-                    escape = true;
+                    source_escape = true;
                 } else if (ch == (uint8_t)'"') {
-                    in_string = false;
+                    source_in_string = false;
                 }
                 continue;
             }
             if (ch == (uint8_t)'"') {
-                in_string = true;
+                source_in_string = true;
                 continue;
             }
             if (ch == (uint8_t)'{') {
-                if (object_depth == 0u) source_policy_reset(required, &allowed);
-                ++object_depth;
+                if (source_object_depth == 0u) source_policy_reset(required, &allowed);
+                ++source_object_depth;
                 continue;
             }
             if (ch == (uint8_t)'}') {
-                if (object_depth == 0u) return NEARBY_DB_ERR_FORMAT;
-                --object_depth;
-                if (object_depth == 0u) {
+                if (source_object_depth == 0u) return NEARBY_DB_ERR_FORMAT;
+                --source_object_depth;
+                if (source_object_depth == 0u) {
                     if (!source_policy_valid(required, &allowed)) return NEARBY_DB_ERR_FORMAT;
                     ++object_count;
                 }
                 continue;
             }
-            if (ch == (uint8_t)']' && object_depth == 0u) {
+            if (ch == (uint8_t)']' && source_object_depth == 0u) {
                 array_closed = true;
             }
         }
     }
 
     if (container.count == 0u || schema.count == 0u || !sources_started ||
-        !array_closed || in_string || object_depth != 0u || object_count != expected_sources) {
+        !array_closed || source_in_string || source_object_depth != 0u ||
+        object_count != expected_sources) {
         return NEARBY_DB_ERR_FORMAT;
     }
     return NEARBY_DB_OK;
