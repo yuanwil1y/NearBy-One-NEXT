@@ -1,9 +1,6 @@
-name: NearBy One NEXT beta.2 release
+name: NearBy One NEXT beta.3 release
 
 on:
-  push:
-    branches:
-      - qa/beta-0.1-bench-bugs
   workflow_dispatch:
 
 permissions:
@@ -11,7 +8,6 @@ permissions:
 
 jobs:
   beta-release:
-    if: github.ref == 'refs/heads/qa/beta-0.1-bench-bugs'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,35 +22,44 @@ jobs:
           path: firmware
           command: >-
             idf.py build &&
+            grep -q '^CONFIG_LV_TXT_ENC_UTF8=y$' sdkconfig &&
+            grep -q "lv_font_montserrat_14" build/nearby_one_next.map &&
             mkdir -p ../release &&
             cd build &&
             esptool --chip esp32c6 merge-bin -o ../../release/NearBy-One-NEXT-ESP32C6.bin @flash_args &&
             cd .. &&
             cp ../artifacts/pinned/nearby.nbdb ../release/NearBy-One-NEXT.nbdb
 
-      - name: Publish v0.1.0-beta.2 prerelease
+      - name: Publish v0.1.0-beta.3 prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v0.1.0-beta.2 \
+          gh release create v0.1.0-beta.3 \
             release/NearBy-One-NEXT-ESP32C6.bin \
             release/NearBy-One-NEXT.nbdb \
             --target "$GITHUB_SHA" \
-            --title "NearBy One NEXT v0.1.0-beta.2" \
+            --title "NearBy One NEXT v0.1.0-beta.3" \
             --prerelease \
             --notes-file - <<'EOF'
-          Second public beta for Waveshare ESP32-C6-Touch-LCD-1.9.
+          Third public beta for Waveshare ESP32-C6-Touch-LCD-1.9.
 
-          This beta contains the software fixes from the first physical-board QA pass:
-          - BUG-LCD-004: correct ST7789 RGB565 byte order so HA blue is rendered with the intended color.
-          - BUG-UI-003: separate/scroll the Web Management credentials area so Stop Portal does not cover credentials.
-          - BUG-UI-001: ensure the LVGL Montserrat 14 symbol glyph font is actually compiled and linked.
+          QA fixes in this beta:
+          - Top Scan / Back / Settings LVGL symbols: fixes the real UTF-8 decoder + symbol-font path. `LV_SYMBOL_*` is decoded as UTF-8 and rendered with LVGL's built-in Montserrat 14 symbol glyphs; no additional font asset is introduced.
+          - `.nbdb` import over the real SoftAP origin (`http://192.168.4.1`): client preflight uses WebCrypto when available and a local SHA-256 fallback when `crypto.subtle` is unavailable in a non-secure context. Server-side release validation remains mandatory before database promotion.
+          - Wi-Fi STA runtime status: Settings and Web Management expose Disconnected / Connecting / Connected, show the current STA IPv4 when connected, and surface a final failed state instead of stopping at “Connection started”. Credentials remain RAM-only/session-only and are not persisted.
+
+          Regression scope retained:
+          - HA blue rendering.
+          - Complete SoftAP credentials display.
+          - Portal start/stop lifecycle.
+          - Scan lifecycle.
 
           Release files:
           - `NearBy-One-NEXT-ESP32C6.bin` — merged ESP32-C6 image; flash from address `0x0`.
           - `NearBy-One-NEXT.nbdb` — recognition database; install through Web Management → Database.
 
           Verification status:
-          - Host/regression and ESP-IDF v6.1 compile checks passed for the software fixes before this release build.
-          - Physical-board acceptance for the three bugs remains `RETEST_REQUIRED`; this release does not claim the bench issues PASS until they are retested on hardware.
+          - Host/integration regression tests and ESP-IDF v6.1 `esp32c6` builds are required to pass before this workflow is dispatched.
+          - Physical-board acceptance for all three fixes remains `RETEST_REQUIRED`.
+          - This prerelease does NOT claim physical-device PASS until the Waveshare board is retested.
           EOF
