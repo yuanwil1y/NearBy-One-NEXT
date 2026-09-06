@@ -84,6 +84,9 @@ for endpoint in [
 ]:
     assert endpoint in portal, f"Web Portal missing real endpoint: {endpoint}"
 assert "safe_to_format=1" in portal
-assert "crypto.subtle.digest('SHA-256'" in portal
+assert "async function sha256Digest(bytes)" in portal
+assert "subtle.digest('SHA-256', bytes)" in portal
+assert "function sha256Fallback(bytes)" in portal
+assert "crypto.subtle.digest('SHA-256', payload)" not in portal
 
 print("production startup/runtime wiring guard: ok")
