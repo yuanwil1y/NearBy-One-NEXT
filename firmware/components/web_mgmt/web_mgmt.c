@@ -166,8 +166,13 @@ static esp_err_t wifi_connect_handler(httpd_req_t *req)
     }
 
     wifi_config_t config = {0};
-    snprintf((char *)config.sta.ssid, sizeof(config.sta.ssid), "%s", ssid);
-    snprintf((char *)config.sta.password, sizeof(config.sta.password), "%s", password);
+    const size_t ssid_len = strlen(ssid);
+    const size_t password_len = strlen(password);
+    if (ssid_len > sizeof(config.sta.ssid) || password_len > sizeof(config.sta.password)) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "ssid/password too long");
+    }
+    memcpy(config.sta.ssid, ssid, ssid_len);
+    memcpy(config.sta.password, password, password_len);
 
     (void)nearby_wifi_sta_disconnect();
     err = nearby_wifi_set_sta_config(&config);
@@ -303,9 +308,16 @@ esp_err_t nearby_web_mgmt_start(void)
     snprintf(s_status.password, sizeof(s_status.password), "%08" PRIX32, esp_random());
 
     wifi_config_t ap_config = {0};
-    snprintf((char *)ap_config.ap.ssid, sizeof(ap_config.ap.ssid), "%s", s_status.ssid);
-    snprintf((char *)ap_config.ap.password, sizeof(ap_config.ap.password), "%s", s_status.password);
-    ap_config.ap.ssid_len = strlen(s_status.ssid);
+    const size_t ap_ssid_len = strlen(s_status.ssid);
+    const size_t ap_password_len = strlen(s_status.password);
+    if (ap_ssid_len > sizeof(ap_config.ap.ssid) ||
+        ap_password_len > sizeof(ap_config.ap.password)) {
+        err = ESP_ERR_INVALID_SIZE;
+        goto fail_ap;
+    }
+    memcpy(ap_config.ap.ssid, s_status.ssid, ap_ssid_len);
+    memcpy(ap_config.ap.password, s_status.password, ap_password_len);
+    ap_config.ap.ssid_len = (uint8_t)ap_ssid_len;
     ap_config.ap.channel = 1;
     ap_config.ap.max_connection = 4;
     ap_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
