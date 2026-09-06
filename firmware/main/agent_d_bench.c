@@ -40,6 +40,11 @@ static uint8_t s_read_buffer[BENCH_SD_CHUNK] __attribute__((aligned(4)));
 #if defined(CONFIG_NEARBY_AGENT_D_LCD_VISUAL_BENCH) || defined(CONFIG_NEARBY_AGENT_D_SPI_CONTENTION_BENCH)
 static uint16_t s_lcd_buffer[NEARBY_BOARD_LCD_H_RES * BENCH_LCD_ROWS];
 
+static uint16_t lcd_rgb565_wire_word(uint16_t color)
+{
+    return (uint16_t)((color << 8) | (color >> 8));
+}
+
 static esp_err_t lcd_draw_rect(esp_lcd_panel_handle_t panel,
                                int x0,
                                int y0,
@@ -59,7 +64,7 @@ static esp_err_t lcd_draw_rect(esp_lcd_panel_handle_t panel,
         if (pixels > sizeof(s_lcd_buffer) / sizeof(s_lcd_buffer[0])) {
             return ESP_ERR_INVALID_SIZE;
         }
-        for (size_t i = 0; i < pixels; ++i) s_lcd_buffer[i] = color;
+        for (size_t i = 0; i < pixels; ++i) s_lcd_buffer[i] = lcd_rgb565_wire_word(color);
         esp_err_t err = esp_lcd_panel_draw_bitmap(panel, x0, y, x1, y + rows, s_lcd_buffer);
         if (err != ESP_OK) return err;
         y += rows;
@@ -84,7 +89,16 @@ static esp_err_t lcd_visual_bench(const nearby_board_lcd_handles_t *lcd)
     if (lcd == NULL || lcd->panel == NULL) return ESP_ERR_INVALID_ARG;
     ESP_LOGW(TAG, "BENCH_REQUIRED LCD: verify portrait 170x320, all four corners, color order and inversion");
 
-    static const uint16_t colors[] = {0xf800, 0x07e0, 0x001f, 0xffff, 0x0000};
+    static const uint16_t colors[] = {
+        0xf800, /* red */
+        0x07e0, /* green */
+        0x001f, /* blue */
+        0xffff, /* white */
+        0x0000, /* black */
+        0x8410, /* approximately 50% gray */
+        0x055e, /* NB_BLUE #03A9F4 converted to RGB565 */
+    };
+    ESP_LOGW(TAG, "LCD bands top->bottom: RED GREEN BLUE WHITE BLACK GRAY NB_BLUE(#03A9F4)");
     const int band_height = NEARBY_BOARD_LCD_V_RES / (int)(sizeof(colors) / sizeof(colors[0]));
     for (size_t i = 0; i < sizeof(colors) / sizeof(colors[0]); ++i) {
         const int y0 = (int)i * band_height;

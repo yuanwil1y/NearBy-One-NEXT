@@ -395,7 +395,7 @@ static void render_portal_modal(void)
     if (!g.settings_screen) return;
     if (g.portal_modal) NB_OBJ_DELETE(g.portal_modal);
     g.portal_modal = lv_obj_create(g.settings_screen);
-    lv_obj_set_size(g.portal_modal, 158, 202);
+    lv_obj_set_size(g.portal_modal, 158, 252);
     lv_obj_align(g.portal_modal, LV_ALIGN_CENTER, 0, 12);
     lv_obj_set_style_bg_color(g.portal_modal, lv_color_white(), 0);
     lv_obj_set_style_radius(g.portal_modal, 12, 0);
@@ -418,12 +418,24 @@ static void render_portal_modal(void)
     } else {
         (void)snprintf(text, sizeof(text), "Starting Web Management…");
     }
-    lv_obj_t *body = lv_label_create(g.portal_modal);
+
+    lv_obj_t *credentials = lv_obj_create(g.portal_modal);
+    lv_obj_set_pos(credentials, 0, 26);
+    lv_obj_set_size(credentials, 136, 154);
+    lv_obj_set_style_bg_opa(credentials, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(credentials, 0, 0);
+    lv_obj_set_style_radius(credentials, 0, 0);
+    lv_obj_set_style_pad_all(credentials, 0, 0);
+    lv_obj_set_scroll_dir(credentials, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(credentials, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_add_flag(credentials, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *body = lv_label_create(credentials);
     lv_label_set_text(body, text);
-    lv_obj_set_width(body, 136);
+    lv_obj_set_width(body, 132);
     lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_color(body, lv_color_hex(NB_MUTED), 0);
-    lv_obj_align(body, LV_ALIGN_TOP_LEFT, 0, 28);
+    lv_obj_set_pos(body, 0, 0);
 
     lv_obj_t *stop = NB_BUTTON_CREATE(g.portal_modal);
     lv_obj_set_size(stop, 116, 32);

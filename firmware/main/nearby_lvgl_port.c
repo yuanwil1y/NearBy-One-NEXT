@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
@@ -27,6 +28,19 @@ static lv_indev_drv_t s_indev_drv;
 static esp_timer_handle_t s_tick_timer;
 static bool s_initialized;
 
+static void rgb565_swap_bytes_in_place(lv_color_t *pixels, size_t count)
+{
+    _Static_assert(sizeof(lv_color_t) == sizeof(uint16_t),
+                   "LVGL RGB565 pixel must be exactly 16 bits");
+    uint8_t *bytes = (uint8_t *)pixels;
+    for (size_t i = 0; i < count; ++i) {
+        const size_t offset = i * 2u;
+        const uint8_t first = bytes[offset];
+        bytes[offset] = bytes[offset + 1u];
+        bytes[offset + 1u] = first;
+    }
+}
+
 static bool lcd_color_done(esp_lcd_panel_io_handle_t panel_io,
                            esp_lcd_panel_io_event_data_t *event_data,
                            void *user_ctx)
@@ -46,6 +60,10 @@ static void lvgl_flush(lv_disp_drv_t *drv,
         if (drv != NULL) lv_disp_flush_ready(drv);
         return;
     }
+    const size_t width = (size_t)(area->x2 - area->x1 + 1);
+    const size_t height = (size_t)(area->y2 - area->y1 + 1);
+    rgb565_swap_bytes_in_place(color_map, width * height);
+
     esp_err_t err = esp_lcd_panel_draw_bitmap(s_panel,
                                                area->x1,
                                                area->y1,
