@@ -1,0 +1,76 @@
+name: Release beta.3 once
+
+on:
+  push:
+    branches:
+      - qa/beta-0.1-bench-bugs
+    paths:
+      - .github/workflows/release-beta3-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 8ff71d4522343ddc957070e64e4b899c55e996c2
+          submodules: recursive
+
+      - name: Build exact validated ESP-IDF v6.1 candidate
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.1
+          target: esp32c6
+          path: firmware
+          command: >-
+            idf.py build &&
+            grep -q '^CONFIG_LV_TXT_ENC_UTF8=y$' sdkconfig &&
+            grep -q "lv_font_montserrat_14" build/nearby_one_next.map &&
+            mkdir -p ../release &&
+            cd build &&
+            esptool --chip esp32c6 merge-bin -o ../../release/NearBy-One-NEXT-ESP32C6.bin @flash_args &&
+            cd .. &&
+            cp ../artifacts/pinned/nearby.nbdb ../release/NearBy-One-NEXT.nbdb
+
+      - name: Publish v0.1.0-beta.3 prerelease at validated SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "8ff71d4522343ddc957070e64e4b899c55e996c2"
+          if gh release view v0.1.0-beta.3 >/dev/null 2>&1; then
+            echo "v0.1.0-beta.3 already exists" >&2
+            exit 1
+          fi
+          gh release create v0.1.0-beta.3 \
+            release/NearBy-One-NEXT-ESP32C6.bin \
+            release/NearBy-One-NEXT.nbdb \
+            --target "8ff71d4522343ddc957070e64e4b899c55e996c2" \
+            --title "NearBy One NEXT v0.1.0-beta.3" \
+            --prerelease \
+            --notes-file - <<'EOF'
+          Third public beta for Waveshare ESP32-C6-Touch-LCD-1.9.
+
+          QA fixes in this beta:
+          - Top Scan / Back / Settings LVGL symbols: fixes the real UTF-8 decoder + symbol-font path. `LV_SYMBOL_*` is decoded as UTF-8 and rendered with LVGL's built-in Montserrat 14 symbol glyphs; no additional font asset is introduced.
+          - `.nbdb` import over the real SoftAP origin (`http://192.168.4.1`): client preflight uses WebCrypto when available and a local SHA-256 fallback when `crypto.subtle` is unavailable in a non-secure context. Server-side release validation remains mandatory before database promotion.
+          - Wi-Fi STA runtime status: Settings and Web Management expose Disconnected / Connecting / Connected, show the current STA IPv4 when connected, and surface a final failed state instead of stopping at “Connection started”. Credentials remain RAM-only/session-only and are not persisted.
+
+          Regression scope retained:
+          - HA blue rendering.
+          - Complete SoftAP credentials display.
+          - Portal start/stop lifecycle.
+          - Scan lifecycle.
+
+          Release files:
+          - `NearBy-One-NEXT-ESP32C6.bin` — merged ESP32-C6 image; flash from address `0x0`.
+          - `NearBy-One-NEXT.nbdb` — recognition database; install through Web Management → Database.
+
+          Verification status:
+          - Host/integration regression tests and ESP-IDF v6.1 `esp32c6` builds passed on validated commit `8ff71d4522343ddc957070e64e4b899c55e996c2` before publication.
+          - Physical-board acceptance for all three fixes remains `RETEST_REQUIRED`.
+          - This prerelease does NOT claim physical-device PASS until the Waveshare board is retested.
+          EOF
