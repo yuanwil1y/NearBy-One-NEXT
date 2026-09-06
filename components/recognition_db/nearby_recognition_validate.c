@@ -12,11 +12,10 @@
 #define NBY_READER_ABI 1u
 #define NBY_FLAG_SHA256 0x0001u
 #define NBY_KNOWN_FLAGS NBY_FLAG_SHA256
-#define NBY_MANIFEST_MAX 8192u
 #define NBY_STREAM_BYTES 4096u
 
 static const uint8_t k_magic[8] = {'N','B','Y','D','B',0,'\r','\n'};
-static char s_manifest[NBY_MANIFEST_MAX + 1u];
+/* One bounded scratch buffer is reused for manifest policy and payload integrity. */
 static uint8_t s_stream[NBY_STREAM_BYTES];
 
 typedef struct {
@@ -168,94 +167,6 @@ static void sha256_final(sha256_ctx_t *ctx, uint8_t out[32])
     }
 }
 
-static size_t count_token(const char *start, size_t len, const char *token)
-{
-    const size_t token_len = strlen(token);
-    size_t count = 0;
-    if (token_len == 0 || len < token_len) return 0;
-    for (size_t i = 0; i + token_len <= len; ++i) {
-        if (memcmp(start + i, token, token_len) == 0) ++count;
-    }
-    return count;
-}
-
-static bool source_object_valid(const char *start, size_t len)
-{
-    static const char *required[] = {
-        "\"source_id\":",
-        "\"upstream_revision\":",
-        "\"license_spdx\":",
-        "\"redistribution\":",
-        "\"classification\":",
-        "\"transform\":",
-    };
-    for (size_t i = 0; i < sizeof(required) / sizeof(required[0]); ++i) {
-        if (count_token(start, len, required[i]) != 1u) return false;
-    }
-    return count_token(start, len, "\"redistribution\":\"allowed\"") == 1u;
-}
-
-static bool manifest_release_valid(char *manifest, size_t len, uint32_t expected_sources)
-{
-    manifest[len] = '\0';
-    if (strstr(manifest, "\"container\":\"nearby-recognition-db\"") == NULL ||
-        strstr(manifest, "\"schema_version\":1") == NULL) {
-        return false;
-    }
-
-    char *sources = strstr(manifest, "\"sources\":[");
-    if (sources == NULL) return false;
-    sources += strlen("\"sources\":[");
-
-    bool in_string = false;
-    bool escape = false;
-    unsigned object_depth = 0;
-    char *object_start = NULL;
-    uint32_t object_count = 0;
-    bool array_closed = false;
-
-    for (char *p = sources; (size_t)(p - manifest) < len; ++p) {
-        const char ch = *p;
-        if (in_string) {
-            if (escape) {
-                escape = false;
-            } else if (ch == '\\') {
-                escape = true;
-            } else if (ch == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-        if (ch == '"') {
-            in_string = true;
-            continue;
-        }
-        if (ch == '{') {
-            if (object_depth == 0u) object_start = p;
-            ++object_depth;
-            continue;
-        }
-        if (ch == '}') {
-            if (object_depth == 0u) return false;
-            --object_depth;
-            if (object_depth == 0u) {
-                if (object_start == NULL ||
-                    !source_object_valid(object_start, (size_t)(p - object_start + 1))) {
-                    return false;
-                }
-                ++object_count;
-                object_start = NULL;
-            }
-            continue;
-        }
-        if (ch == ']' && object_depth == 0u) {
-            array_closed = true;
-            break;
-        }
-    }
-    return array_closed && !in_string && object_depth == 0u && object_count == expected_sources;
-}
-
 static bool seek_abs(FILE *fp, uint64_t offset)
 {
     if (offset > (uint64_t)LONG_MAX) return false;
@@ -269,6 +180,152 @@ static bool actual_size(FILE *fp, uint64_t *out)
     if (size < 0 || fseek(fp, 0, SEEK_SET) != 0) return false;
     *out = (uint64_t)size;
     return true;
+}
+
+typedef struct {
+    const char *token;
+    size_t length;
+    size_t matched;
+    uint8_t count;
+} token_matcher_t;
+
+static bool token_feed(token_matcher_t *matcher, uint8_t ch)
+{
+    if (matcher == NULL || matcher->length == 0u) return false;
+    if (ch == (uint8_t)matcher->token[matcher->matched]) {
+        ++matcher->matched;
+        if (matcher->matched == matcher->length) {
+            if (matcher->count < 2u) ++matcher->count;
+            matcher->matched = 0u;
+            return true;
+        }
+        return false;
+    }
+    matcher->matched = ch == (uint8_t)matcher->token[0] ? 1u : 0u;
+    return false;
+}
+
+static void token_reset(token_matcher_t *matcher)
+{
+    matcher->matched = 0u;
+    matcher->count = 0u;
+}
+
+static void source_policy_reset(token_matcher_t required[6], token_matcher_t *allowed)
+{
+    for (size_t i = 0; i < 6u; ++i) token_reset(&required[i]);
+    token_reset(allowed);
+}
+
+static bool source_policy_valid(const token_matcher_t required[6],
+                                const token_matcher_t *allowed)
+{
+    for (size_t i = 0; i < 6u; ++i) {
+        if (required[i].count != 1u) return false;
+    }
+    return allowed->count == 1u;
+}
+
+static nearby_db_result_t manifest_release_validate(FILE *fp,
+                                                    uint64_t offset,
+                                                    uint64_t length,
+                                                    uint32_t expected_sources)
+{
+    static const char container_token[] = "\"container\":\"nearby-recognition-db\"";
+    static const char schema_token[] = "\"schema_version\":1";
+    static const char sources_token[] = "\"sources\":[";
+    static const char *const required_tokens[6] = {
+        "\"source_id\":",
+        "\"upstream_revision\":",
+        "\"license_spdx\":",
+        "\"redistribution\":",
+        "\"classification\":",
+        "\"transform\":",
+    };
+    static const char allowed_token[] = "\"redistribution\":\"allowed\"";
+
+    token_matcher_t container = {container_token, sizeof(container_token) - 1u, 0u, 0u};
+    token_matcher_t schema = {schema_token, sizeof(schema_token) - 1u, 0u, 0u};
+    token_matcher_t sources = {sources_token, sizeof(sources_token) - 1u, 0u, 0u};
+    token_matcher_t required[6];
+    for (size_t i = 0; i < 6u; ++i) {
+        required[i] = (token_matcher_t){required_tokens[i], strlen(required_tokens[i]), 0u, 0u};
+    }
+    token_matcher_t allowed = {allowed_token, sizeof(allowed_token) - 1u, 0u, 0u};
+
+    bool sources_started = false;
+    bool array_closed = false;
+    bool in_string = false;
+    bool escape = false;
+    unsigned object_depth = 0u;
+    uint32_t object_count = 0u;
+
+    if (!seek_abs(fp, offset)) return NEARBY_DB_ERR_IO;
+    uint64_t remaining = length;
+    while (remaining > 0u) {
+        const size_t take = remaining < sizeof(s_stream) ? (size_t)remaining : sizeof(s_stream);
+        if (fread(s_stream, 1, take, fp) != take) return NEARBY_DB_ERR_IO;
+        remaining -= take;
+
+        for (size_t i = 0; i < take; ++i) {
+            const uint8_t ch = s_stream[i];
+            (void)token_feed(&container, ch);
+            (void)token_feed(&schema, ch);
+
+            if (!sources_started) {
+                if (token_feed(&sources, ch)) {
+                    sources_started = true;
+                    in_string = false;
+                    escape = false;
+                }
+                continue;
+            }
+            if (array_closed) continue;
+
+            if (object_depth > 0u) {
+                for (size_t t = 0; t < 6u; ++t) (void)token_feed(&required[t], ch);
+                (void)token_feed(&allowed, ch);
+            }
+
+            if (in_string) {
+                if (escape) {
+                    escape = false;
+                } else if (ch == (uint8_t)'\\') {
+                    escape = true;
+                } else if (ch == (uint8_t)'"') {
+                    in_string = false;
+                }
+                continue;
+            }
+            if (ch == (uint8_t)'"') {
+                in_string = true;
+                continue;
+            }
+            if (ch == (uint8_t)'{') {
+                if (object_depth == 0u) source_policy_reset(required, &allowed);
+                ++object_depth;
+                continue;
+            }
+            if (ch == (uint8_t)'}') {
+                if (object_depth == 0u) return NEARBY_DB_ERR_FORMAT;
+                --object_depth;
+                if (object_depth == 0u) {
+                    if (!source_policy_valid(required, &allowed)) return NEARBY_DB_ERR_FORMAT;
+                    ++object_count;
+                }
+                continue;
+            }
+            if (ch == (uint8_t)']' && object_depth == 0u) {
+                array_closed = true;
+            }
+        }
+    }
+
+    if (container.count == 0u || schema.count == 0u || !sources_started ||
+        !array_closed || in_string || object_depth != 0u || object_count != expected_sources) {
+        return NEARBY_DB_ERR_FORMAT;
+    }
+    return NEARBY_DB_OK;
 }
 
 nearby_db_result_t nearby_db_validate_release_file(
@@ -323,19 +380,15 @@ nearby_db_result_t nearby_db_validate_release_file(
     const uint64_t payload_size = rd64(header + 64);
     const uint32_t source_count = rd32(header + 28);
     if (declared_size != size || manifest_offset != NBY_HEADER_SIZE ||
-        manifest_size > NBY_MANIFEST_MAX ||
-        manifest_offset + manifest_size != payload_offset ||
+        manifest_offset > size || manifest_size > size - manifest_offset ||
+        payload_offset != manifest_offset + manifest_size ||
         payload_offset > size || payload_size > size - payload_offset ||
         payload_offset + payload_size != size) {
         goto done;
     }
 
-    if (!seek_abs(fp, manifest_offset) ||
-        fread(s_manifest, 1, (size_t)manifest_size, fp) != (size_t)manifest_size) {
-        result = NEARBY_DB_ERR_IO;
-        goto done;
-    }
-    if (!manifest_release_valid(s_manifest, (size_t)manifest_size, source_count)) goto done;
+    result = manifest_release_validate(fp, manifest_offset, manifest_size, source_count);
+    if (result != NEARBY_DB_OK) goto done;
 
     if (!seek_abs(fp, payload_offset)) {
         result = NEARBY_DB_ERR_IO;
@@ -346,7 +399,7 @@ nearby_db_result_t nearby_db_validate_release_file(
     sha256_ctx_t sha;
     sha256_init(&sha);
     while (remaining > 0u) {
-        size_t take = remaining < sizeof(s_stream) ? (size_t)remaining : sizeof(s_stream);
+        const size_t take = remaining < sizeof(s_stream) ? (size_t)remaining : sizeof(s_stream);
         if (fread(s_stream, 1, take, fp) != take) {
             result = NEARBY_DB_ERR_IO;
             goto done;
@@ -355,10 +408,16 @@ nearby_db_result_t nearby_db_validate_release_file(
         sha256_update(&sha, s_stream, take);
         remaining -= take;
     }
-    if (payload_crc != rd32(header + 72)) goto done;
+    if (payload_crc != rd32(header + 72)) {
+        result = NEARBY_DB_ERR_FORMAT;
+        goto done;
+    }
     uint8_t digest[32];
     sha256_final(&sha, digest);
-    if (memcmp(digest, header + 80, sizeof(digest)) != 0) goto done;
+    if (memcmp(digest, header + 80, sizeof(digest)) != 0) {
+        result = NEARBY_DB_ERR_FORMAT;
+        goto done;
+    }
 
     fclose(fp);
     fp = NULL;
