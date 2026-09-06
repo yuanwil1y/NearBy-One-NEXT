@@ -1,0 +1,131 @@
+name: NearBy One NEXT beta.1 bench bugfix CI
+
+on:
+  push:
+    branches:
+      - qa/beta-0.1-bench-bugs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qa-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Guard the three reported bench fixes
+        run: python tests/integration/test_beta1_bench_regressions.py
+
+  host-a:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run HA core host tests
+        run: bash tests/run_ha_core_tests.sh
+      - name: Run semantic-to-HA integration path
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror \
+            -Icomponents/ha_core/include -Ifirmware/main \
+            components/ha_core/ha_core.c \
+            firmware/main/nearby_semantic_apply.c \
+            tests/integration/test_semantic_apply.c \
+            -o /tmp/test_semantic_apply
+          /tmp/test_semantic_apply
+      - name: Guard production startup/runtime wiring
+        run: python tests/integration/test_production_wiring.py
+
+  host-b:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: BLE parser vectors
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/components/discovery_parser/include firmware/components/discovery_parser/ble_ad_parser.c tests/host/test_ble_discovery.c -o /tmp/test_ble && /tmp/test_ble
+      - name: LAN parser vectors and HA normalization
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/components/discovery_parser/include firmware/components/discovery_parser/mdns_parser.c firmware/components/discovery_parser/ssdp_parser.c firmware/components/discovery_parser/dhcp_parser.c tests/host/test_lan_discovery.c -o /tmp/test_lan && /tmp/test_lan
+          gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/components/discovery_parser/include firmware/components/discovery_parser/mdns_parser.c firmware/components/discovery_parser/dhcp_parser.c tests/host/test_ha_normalization.c -o /tmp/test_ha_norm && /tmp/test_ha_norm
+      - name: Dedup and exact matcher keys
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/components/discovery_parser/include -Itests/host/fixtures/c_current firmware/components/discovery_parser/matcher_keys.c firmware/components/discovery_parser/transport_dedup.c tests/host/test_dedup_matcher_keys.c -o /tmp/test_dedup && /tmp/test_dedup
+      - name: B to integrated C typed recognition contract
+        run: |
+          python tests/host/build_b_to_c_fixture.py tools/dbgen /tmp/b-to-c-contract.nbdb
+          gcc -std=c11 -Wall -Wextra -Werror -Icomponents/recognition_db/include -Ifirmware/components/discovery_parser/include firmware/components/discovery_parser/ble_ad_parser.c firmware/components/discovery_parser/recognition_adapter.c components/recognition_db/nearby_recognition_db.c components/recognition_db/nearby_recognition_match.c tests/host/test_b_to_c_contract.c -o /tmp/test_b_to_c && /tmp/test_b_to_c /tmp/b-to-c-contract.nbdb
+      - name: Wi-Fi, IEEE 802.15.4, Zigbee and Matter parser vectors
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/components/discovery_parser/include firmware/components/discovery_parser/wifi_management_parser.c tests/host/test_wifi_discovery.c -o /tmp/test_wifi && /tmp/test_wifi
+          gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/components/discovery_parser/include firmware/components/discovery_parser/i154_mac_parser.c firmware/components/discovery_parser/zigbee_discovery.c tests/host/test_i154_zigbee.c -o /tmp/test_i154 && /tmp/test_i154
+          gcc -std=c11 -Wall -Wextra -Werror -Ifirmware/components/discovery_parser/include firmware/components/discovery_parser/ble_ad_parser.c firmware/components/discovery_parser/matcher_keys.c firmware/components/discovery_parser/matter_discovery.c tests/host/test_matter_discovery.c -o /tmp/test_matter && /tmp/test_matter
+      - name: Malformed parser sanitizer tests
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -Ifirmware/components/discovery_parser/include firmware/components/discovery_parser/ble_ad_parser.c firmware/components/discovery_parser/mdns_parser.c firmware/components/discovery_parser/ssdp_parser.c firmware/components/discovery_parser/dhcp_parser.c firmware/components/discovery_parser/wifi_management_parser.c firmware/components/discovery_parser/i154_mac_parser.c firmware/components/discovery_parser/zigbee_discovery.c tests/host/test_parser_fuzz.c -o /tmp/test_fuzz && /tmp/test_fuzz
+      - name: Scanner fixed-slot and coordinator tests
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror -Itests/host/fixtures/d_frozen/include -Ifirmware/components/discovery_parser/include -Ifirmware/components/scan_coordinator/include firmware/components/scan_coordinator/scan_default_runners.c tests/host/test_default_runner_wiring.c -o /tmp/test_runners && /tmp/test_runners
+          gcc -std=c11 -Wall -Wextra -Werror -Itests/host/fixtures/d_frozen/include -Ifirmware/components/scan_coordinator/include firmware/components/scan_coordinator/scan_coordinator.c tests/host/test_scan_coordinator.c -o /tmp/test_coord && /tmp/test_coord
+
+  host-c:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run recognition DB generator/runtime/preflight host tests
+        run: python -m unittest discover -s tools/dbgen -p 'test_*.py' -v
+      - name: Release-preflight committed DB
+        run: python tools/dbgen/preflight.py artifacts/pinned/nearby.nbdb --release
+      - name: Run firmware release validator against pinned DB
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror \
+            -Icomponents/recognition_db/include \
+            components/recognition_db/nearby_recognition_db.c \
+            components/recognition_db/nearby_recognition_validate.c \
+            tests/integration/test_release_validator.c \
+            -o /tmp/test_release_validator
+          /tmp/test_release_validator artifacts/pinned/nearby.nbdb
+
+  build-default:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: ESP-IDF v6.1 esp32c6 QA build, size and retest package
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.1
+          target: esp32c6
+          path: firmware
+          command: >-
+            idf.py build &&
+            grep -q "lv_font_montserrat_14" build/nearby_one_next.map &&
+            idf.py size &&
+            mkdir -p ../qa-release &&
+            cd build &&
+            esptool --chip esp32c6 merge-bin -o ../../qa-release/NearBy-One-NEXT-ESP32C6-beta1-bench-fix.bin @flash_args &&
+            cd .. &&
+            cp ../artifacts/pinned/nearby.nbdb ../qa-release/NearBy-One-NEXT.nbdb &&
+            echo "merged_bin_bytes=$(wc -c < ../qa-release/NearBy-One-NEXT-ESP32C6-beta1-bench-fix.bin)" &&
+            echo "app_bin_bytes=$(wc -c < build/nearby_one_next.bin)"
+      - name: Upload physical-retest package
+        uses: actions/upload-artifact@v4
+        with:
+          name: nearby-one-next-beta1-bench-fix-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            qa-release/NearBy-One-NEXT-ESP32C6-beta1-bench-fix.bin
+            qa-release/NearBy-One-NEXT.nbdb
+
+  build-all-benches:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: ESP-IDF v6.1 esp32c6 all BENCH_REQUIRED compile paths
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.1
+          target: esp32c6
+          path: firmware
+          command: idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.bench-ci" build
