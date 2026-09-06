@@ -5,6 +5,16 @@
 #include "radio_runtime.h"
 #include "scan_session.h"
 
+static const nearby_scan_module_t k_module_run_order[NEARBY_SCAN_MODULE_COUNT] = {
+    NEARBY_SCAN_MODULE_WIFI_ACTIVE,
+    NEARBY_SCAN_MODULE_ZEROCONF,
+    NEARBY_SCAN_MODULE_SSDP,
+    NEARBY_SCAN_MODULE_DHCP,
+    NEARBY_SCAN_MODULE_WIFI_MANAGEMENT,
+    NEARBY_SCAN_MODULE_BLE,
+    NEARBY_SCAN_MODULE_IEEE802154,
+};
+
 static bool module_valid(nearby_scan_module_t module)
 {
     return (unsigned)module < NEARBY_SCAN_MODULE_COUNT;
@@ -156,7 +166,6 @@ esp_err_t nearby_scan_coordinator_module_start(
         return ESP_ERR_INVALID_STATE;
     }
 
-    /* Keep one fixed serial module active at a time. */
     for (unsigned i = 0; i < NEARBY_SCAN_MODULE_COUNT; ++i) {
         if (coordinator->module_status[i] == NEARBY_SCAN_MODULE_RUNNING) {
             return ESP_ERR_INVALID_STATE;
@@ -289,17 +298,17 @@ esp_err_t nearby_scan_coordinator_run(nearby_scan_coordinator_t *coordinator,
         return err;
     }
 
-    for (unsigned i = 0; i < NEARBY_SCAN_MODULE_COUNT; ++i) {
-        if ((enabled_mask & NEARBY_SCAN_MODULE_BIT(i)) == 0) {
+    for (unsigned order = 0; order < NEARBY_SCAN_MODULE_COUNT; ++order) {
+        const nearby_scan_module_t module = k_module_run_order[order];
+        if ((enabled_mask & NEARBY_SCAN_MODULE_BIT(module)) == 0) {
             continue;
         }
-        const nearby_scan_module_t module = (nearby_scan_module_t)i;
         err = nearby_scan_coordinator_module_start(coordinator, module);
         if (err != ESP_OK) {
             return nearby_scan_coordinator_cancel(coordinator, err);
         }
 
-        nearby_scan_module_runner_t runner = runner_for(runners, module);
+        const nearby_scan_module_runner_t runner = runner_for(runners, module);
         nearby_scan_module_outcome_t outcome = {
             .status = NEARBY_SCAN_MODULE_SKIPPED,
             .error = ESP_OK,
