@@ -6,6 +6,7 @@
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "nearby_ble_discovery.h"
+#include "nearby_transport_dedup.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,6 +22,8 @@ typedef struct {
     bool passive;
     TickType_t sync_timeout_ticks;
     TickType_t idle_poll_ticks;
+    /* Optional scan-generation-owned bounded state; never persisted. */
+    nearby_scan_dedup_t *dedup;
     nearby_ble_observation_cb_t observation_cb;
     void *observation_ctx;
 } nearby_ble_scan_config_t;
@@ -29,6 +32,7 @@ typedef struct {
     uint32_t legacy_records;
     uint32_t extended_records;
     uint32_t emitted_records;
+    uint32_t duplicate_records;
     uint32_t partial_records;
     uint32_t malformed_records;
     uint32_t legacy_drops_before;
