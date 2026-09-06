@@ -5,6 +5,18 @@
 
 #define SSDP_MATCH_FIELD_MAX 12u
 
+static size_t bounded_strlen(const char *s, size_t cap)
+{
+    size_t n = 0;
+    if (s == NULL) {
+        return 0;
+    }
+    while (n < cap && s[n] != '\0') {
+        ++n;
+    }
+    return n;
+}
+
 static nearby_db_text_t text_from_cstr(const char *s, size_t cap)
 {
     nearby_db_text_t out = {0};
@@ -12,7 +24,7 @@ static nearby_db_text_t text_from_cstr(const char *s, size_t cap)
         return out;
     }
     out.ptr = s;
-    out.len = strnlen(s, cap);
+    out.len = bounded_strlen(s, cap);
     return out;
 }
 
@@ -86,7 +98,7 @@ nearby_db_result_t nearby_recognition_match_ble(
         .manufacturer_data_count = observation->facts.manufacturer_data_count,
     };
 
-    nearby_db_result_t rc = nearby_db_match_ble(db, &facts, workspace, out_result);
+    const nearby_db_result_t rc = nearby_db_match_ble(db, &facts, workspace, out_result);
     return validate_c_result(rc, out_result);
 }
 
@@ -113,7 +125,7 @@ nearby_db_result_t nearby_recognition_match_zeroconf(
         .properties = properties,
         .property_count = service->txt_count,
     };
-    nearby_db_result_t rc = nearby_db_match_zeroconf(db, &facts, workspace, out_result);
+    const nearby_db_result_t rc = nearby_db_match_zeroconf(db, &facts, workspace, out_result);
     return validate_c_result(rc, out_result);
 }
 
@@ -157,7 +169,7 @@ nearby_db_result_t nearby_recognition_match_ssdp(
         .fields = fields,
         .field_count = count,
     };
-    nearby_db_result_t rc = nearby_db_match_ssdp(db, &query, workspace, out_result);
+    const nearby_db_result_t rc = nearby_db_match_ssdp(db, &query, workspace, out_result);
     return validate_c_result(rc, out_result);
 }
 
@@ -180,7 +192,7 @@ nearby_db_result_t nearby_recognition_match_dhcp(
         .macaddress = {mac, mac_len * 2u},
         .registered_device = false,
     };
-    nearby_db_result_t rc = nearby_db_match_dhcp(db, &query, workspace, out_result);
+    const nearby_db_result_t rc = nearby_db_match_dhcp(db, &query, workspace, out_result);
     return validate_c_result(rc, out_result);
 }
 
