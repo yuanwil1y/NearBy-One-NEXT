@@ -1,5 +1,6 @@
 #include "nearby_lan_discovery.h"
 
+#include <ctype.h>
 #include <string.h>
 
 #define DHCP_FIXED_LEN 240
@@ -9,6 +10,13 @@ static uint32_t be32(const uint8_t *p)
 {
     return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
            ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+}
+
+static void lowercase_ascii(char *s)
+{
+    for (; *s != '\0'; ++s) {
+        *s = (char)tolower((unsigned char)*s);
+    }
 }
 
 static void copy_string(char *dst, size_t cap, bool *truncated,
@@ -74,6 +82,7 @@ nearby_lan_parse_result_t nearby_dhcp_parse(const uint8_t *message,
         case 12:
             copy_string(out->hostname, sizeof(out->hostname),
                         &out->hostname_truncated, value, len);
+            lowercase_ascii(out->hostname);
             partial = partial || out->hostname_truncated;
             break;
         case 53:
