@@ -1,0 +1,36 @@
+name: Apply beta.4 QA patch
+
+on:
+  push:
+    branches:
+      - qa/beta-0.1-bench-bugs
+    paths:
+      - .github/workflows/apply-beta4-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply beta.4 product patch
+        run: |
+          python tools/beta4_patch.py
+          python tests/integration/test_beta4_qa_regressions.py
+      - name: Commit product changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/nearby_ui \
+                  firmware/components/nearby_board \
+                  firmware/components/db_storage \
+                  firmware/components/web_mgmt \
+                  firmware/main/main.c \
+                  firmware/main/portal_index.html \
+                  web-portal/index.html \
+                  tests/integration/test_beta4_qa_regressions.py
+          git diff --cached --check
+          git commit -m "fix: address beta.4 physical QA findings"
+          git push origin HEAD:qa/beta-0.1-bench-bugs
