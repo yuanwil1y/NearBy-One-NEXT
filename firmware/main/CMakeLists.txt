@@ -1,5 +1,17 @@
-set(agent_d_srcs "main.c")
-set(agent_d_requires nearby_board scan_session native_handoff radio_runtime esp_system esp_timer web_mgmt)
+set(agent_d_srcs
+    "main.c"
+    "nearby_semantic_apply.c"
+)
+set(agent_d_requires
+    nearby_board
+    scan_session
+    native_handoff
+    radio_runtime
+    esp_system
+    esp_timer
+    web_mgmt
+    ha_core
+)
 
 if(CONFIG_NEARBY_AGENT_D_LCD_VISUAL_BENCH OR
    CONFIG_NEARBY_AGENT_D_TOUCH_BENCH OR
