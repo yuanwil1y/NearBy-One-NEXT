@@ -16,6 +16,7 @@ typedef struct {
     void (*scan_requested)(void *ctx);
     void (*portal_start_requested)(void *ctx);
     void (*portal_stop_requested)(void *ctx);
+    void (*service_requested)(const char *entity_id, const char *service, void *ctx);
     void *ctx;
 } nearby_ui_callbacks_t;
 

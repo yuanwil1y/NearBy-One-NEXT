@@ -1,5 +1,7 @@
 set(agent_d_srcs
     "main.c"
+    "nearby_lvgl_port.c"
+    "nearby_web_portal.c"
     "nearby_semantic_apply.c"
     "nearby_scan_pipeline.c"
 )
@@ -10,8 +12,14 @@ set(agent_d_requires
     radio_runtime
     esp_system
     esp_timer
+    esp_lcd
+    esp_app_format
+    esp_http_server
     web_mgmt
+    db_storage
     ha_core
+    nearby_ui
+    lvgl
     recognition_db
     discovery_parser
     scan_coordinator
@@ -31,4 +39,5 @@ idf_component_register(
     SRCS ${agent_d_srcs}
     INCLUDE_DIRS "."
     REQUIRES ${agent_d_requires}
+    EMBED_TXTFILES "portal_index.html"
 )

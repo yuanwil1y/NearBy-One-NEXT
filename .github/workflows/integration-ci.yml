@@ -16,6 +16,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run HA core host tests
         run: bash tests/run_ha_core_tests.sh
+      - name: Run semantic-to-HA integration path
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror \
+            -Icomponents/ha_core/include -Ifirmware/main \
+            components/ha_core/ha_core.c \
+            firmware/main/nearby_semantic_apply.c \
+            tests/integration/test_semantic_apply.c \
+            -o /tmp/test_semantic_apply
+          /tmp/test_semantic_apply
+      - name: Guard production startup/runtime wiring
+        run: python tests/integration/test_production_wiring.py
 
   host-b:
     runs-on: ubuntu-latest
@@ -56,6 +67,15 @@ jobs:
         run: python -m unittest discover -s tools/dbgen -p 'test_*.py' -v
       - name: Release-preflight committed DB
         run: python tools/dbgen/preflight.py artifacts/pinned/nearby.nbdb --release
+      - name: Run firmware release validator against pinned DB
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror \
+            -Icomponents/recognition_db/include \
+            components/recognition_db/nearby_recognition_db.c \
+            components/recognition_db/nearby_recognition_validate.c \
+            tests/integration/test_release_validator.c \
+            -o /tmp/test_release_validator
+          /tmp/test_release_validator artifacts/pinned/nearby.nbdb
 
   build-default:
     runs-on: ubuntu-latest

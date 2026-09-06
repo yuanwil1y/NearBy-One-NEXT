@@ -18,7 +18,6 @@
 #define NB_TEXT 0x263238
 #define NB_MUTED 0x607D8B
 #define NB_BORDER 0xE3E8EC
-#define NB_OK 0x2E7D32
 
 #if LVGL_VERSION_MAJOR >= 9
 #define NB_SCREEN_LOAD(screen) lv_screen_load(screen)
@@ -47,6 +46,8 @@ static struct {
     lv_obj_t *detail_screen;
     lv_obj_t *settings_screen;
     lv_obj_t *portal_modal;
+    lv_obj_t *db_value_label;
+    lv_obj_t *fw_value_label;
 
     char selected_device_id[HA_ID_LEN];
     char db_status[48];
@@ -101,6 +102,8 @@ static void release_settings(void)
     lv_obj_t *screen = g.settings_screen;
     g.settings_screen = NULL;
     g.portal_modal = NULL;
+    g.db_value_label = NULL;
+    g.fw_value_label = NULL;
     NB_OBJ_DELETE_ASYNC(screen);
 }
 
@@ -141,7 +144,7 @@ static void device_clicked(lv_event_t *event)
 
 static void service_clicked(lv_event_t *event)
 {
-    if (g.scan_state == NEARBY_UI_SCAN_SCANNING) return;
+    if (g.scan_state == NEARBY_UI_SCAN_SCANNING || !g.cb.service_requested) return;
     const ha_entity_t *entity = (const ha_entity_t *)lv_event_get_user_data(event);
     if (!entity) return;
 
@@ -155,8 +158,7 @@ static void service_clicked(lv_event_t *event)
                     ? HA_SERVICE_TURN_OFF : HA_SERVICE_TURN_ON;
     }
     if (service && ha_entity_supports_service(entity->entity_id, service)) {
-        (void)ha_entity_call_service(entity->entity_id, service, NULL, 0);
-        show_detail(g.selected_device_id);
+        g.cb.service_requested(entity->entity_id, service, g.cb.ctx);
     }
 }
 
@@ -414,7 +416,7 @@ static void render_portal_modal(void)
                        g.portal_pin[0] ? "\n\nPassword: " : "",
                        g.portal_pin);
     } else {
-        (void)snprintf(text, sizeof(text), "Web Management is not running.");
+        (void)snprintf(text, sizeof(text), "Starting Web Management…");
     }
     lv_obj_t *body = lv_label_create(g.portal_modal);
     lv_label_set_text(body, text);
@@ -460,20 +462,20 @@ static void show_settings(void)
     lv_obj_t *db_card = make_card(content, 58);
     lv_obj_t *db_title = lv_label_create(db_card);
     lv_label_set_text(db_title, "Recognition database");
-    lv_obj_t *db_value = lv_label_create(db_card);
-    lv_label_set_text(db_value, g.db_status);
-    lv_obj_set_width(db_value, 136);
-    lv_label_set_long_mode(db_value, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_color(db_value, lv_color_hex(NB_MUTED), 0);
-    lv_obj_align(db_value, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    g.db_value_label = lv_label_create(db_card);
+    lv_label_set_text(g.db_value_label, g.db_status);
+    lv_obj_set_width(g.db_value_label, 136);
+    lv_label_set_long_mode(g.db_value_label, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_color(g.db_value_label, lv_color_hex(NB_MUTED), 0);
+    lv_obj_align(g.db_value_label, LV_ALIGN_BOTTOM_LEFT, 0, 0);
 
     lv_obj_t *fw_card = make_card(content, 58);
     lv_obj_t *fw_title = lv_label_create(fw_card);
     lv_label_set_text(fw_title, "Firmware");
-    lv_obj_t *fw_value = lv_label_create(fw_card);
-    lv_label_set_text(fw_value, g.firmware);
-    lv_obj_set_style_text_color(fw_value, lv_color_hex(NB_MUTED), 0);
-    lv_obj_align(fw_value, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    g.fw_value_label = lv_label_create(fw_card);
+    lv_label_set_text(g.fw_value_label, g.firmware);
+    lv_obj_set_style_text_color(g.fw_value_label, lv_color_hex(NB_MUTED), 0);
+    lv_obj_align(g.fw_value_label, LV_ALIGN_BOTTOM_LEFT, 0, 0);
     NB_SCREEN_LOAD(g.settings_screen);
 }
 
@@ -495,7 +497,7 @@ void nearby_ui_init(const nearby_ui_callbacks_t *callbacks)
 {
     memset(&g, 0, sizeof(g));
     if (callbacks) g.cb = *callbacks;
-    safe_copy(g.db_status, sizeof(g.db_status), "Not mounted");
+    safe_copy(g.db_status, sizeof(g.db_status), "Missing");
     safe_copy(g.firmware, sizeof(g.firmware), "unknown");
     create_home();
     create_input_blocker();
@@ -544,6 +546,12 @@ void nearby_ui_scan_end(void)
 
 void nearby_ui_refresh_from_ha(void)
 {
+    if (g.detail_screen != NULL && NB_SCREEN_ACTIVE() == g.detail_screen && g.selected_device_id[0]) {
+        char device_id[HA_ID_LEN];
+        safe_copy(device_id, sizeof(device_id), g.selected_device_id);
+        show_detail(device_id);
+        return;
+    }
     rebuild_home_list();
 }
 
@@ -551,6 +559,8 @@ void nearby_ui_set_versions(const char *database_status, const char *firmware_ve
 {
     safe_copy(g.db_status, sizeof(g.db_status), database_status ? database_status : "unknown");
     safe_copy(g.firmware, sizeof(g.firmware), firmware_version ? firmware_version : "unknown");
+    if (g.db_value_label) lv_label_set_text(g.db_value_label, g.db_status);
+    if (g.fw_value_label) lv_label_set_text(g.fw_value_label, g.firmware);
 }
 
 void nearby_ui_set_portal_info(bool running, const char *ssid, const char *address, const char *pin)

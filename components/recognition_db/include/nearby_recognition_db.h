@@ -107,6 +107,13 @@ typedef struct {
     nearby_db_value_ref_t value;
 } nearby_db_match_result_t;
 
+typedef struct {
+    uint32_t db_version;
+    uint32_t schema_version;
+    uint32_t source_count;
+    uint64_t file_size;
+} nearby_db_file_info_t;
+
 /** Open a .nbdb file and validate the fixed header + flat payload header.
  *  This is a cheap runtime-open check; full payload CRC/SHA validation belongs
  *  to the install path before the generation is promoted.
@@ -114,6 +121,18 @@ typedef struct {
 nearby_db_result_t nearby_db_open(nearby_db_t *db, const char *path);
 
 void nearby_db_close(nearby_db_t *db);
+
+/**
+ * Release/install validation for a complete .nbdb file.
+ *
+ * This is Agent C's bounded full-file policy/integrity check used at boot and
+ * as D's upload-finalize hook. It verifies the release source manifest,
+ * payload CRC32 + required SHA-256, then re-opens through nearby_db_open() so
+ * promotion cannot occur without a valid runtime container/index.
+ */
+nearby_db_result_t nearby_db_validate_release_file(
+    const char *path,
+    nearby_db_file_info_t *out_info);
 
 /** Binary-search a UTF-8 key without loading the DB or a shard into RAM.
  *
