@@ -24,6 +24,18 @@
 static uint8_t s_lan_rx[NEARBY_LAN_RX_MAX];
 static char s_mdns_types[NEARBY_MDNS_DISCOVERED_TYPE_MAX][NEARBY_MDNS_NAME_MAX + 1];
 
+static size_t bounded_strlen(const char *s, size_t cap)
+{
+    size_t n = 0;
+    if (s == NULL) {
+        return 0;
+    }
+    while (n < cap && s[n] != '\0') {
+        ++n;
+    }
+    return n;
+}
+
 static TickType_t ms_to_nonzero_ticks(uint32_t ms)
 {
     TickType_t ticks = pdMS_TO_TICKS(ms);
@@ -114,11 +126,12 @@ static bool mdns_add_type(const char *type, uint8_t *count)
     if (*count >= NEARBY_MDNS_DISCOVERED_TYPE_MAX) {
         return false;
     }
-    size_t n = strnlen(type, NEARBY_MDNS_NAME_MAX + 1u);
+    const size_t n = bounded_strlen(type, NEARBY_MDNS_NAME_MAX + 1u);
     if (n == 0 || n > NEARBY_MDNS_NAME_MAX) {
         return false;
     }
-    memcpy(s_mdns_types[*count], type, n + 1u);
+    memcpy(s_mdns_types[*count], type, n);
+    s_mdns_types[*count][n] = '\0';
     ++(*count);
     return true;
 }
@@ -131,22 +144,22 @@ static bool dns_encode_name(uint8_t *buf, size_t cap, size_t *off, const char *n
     const char *p = name;
     while (*p != '\0') {
         const char *dot = strchr(p, '.');
-        size_t len = dot != NULL ? (size_t)(dot - p) : strlen(p);
-        if (len == 0) {
+        const size_t label_len = dot != NULL ? (size_t)(dot - p) : strlen(p);
+        if (label_len == 0) {
             if (dot != NULL && dot[1] == '\0') {
                 p = dot + 1;
                 break;
             }
             return false;
         }
-        if (len > 63u || *off + 1u + len > cap) {
+        if (label_len > 63u || *off + 1u + label_len > cap) {
             return false;
         }
-        buf[(*off)++] = (uint8_t)len;
-        memcpy(buf + *off, p, len);
-        *off += len;
+        buf[(*off)++] = (uint8_t)label_len;
+        memcpy(buf + *off, p, label_len);
+        *off += label_len;
         if (dot == NULL) {
-            p += len;
+            p += label_len;
             break;
         }
         p = dot + 1;
@@ -176,23 +189,9 @@ static esp_err_t mdns_send_ptr_query(int fd, const char *name)
         .sin_port = htons(MDNS_PORT),
         .sin_addr.s_addr = inet_addr("224.0.0.251"),
     };
-    return sendto(fd, query, off, 0, (const struct sockaddr *)&dest, sizeof(dest)) == (ssize_t)off
-               ? ESP_OK : ESP_FAIL;
-}
-
-static esp_err_t mdns_process_datagram(
-    const nearby_zeroconf_scan_config_t *config,
-    nearby_zeroconf_scan_stats_t *stats,
-    uint8_t *type_count)
-{
-    nearby_mdns_facts_t facts;
-    const nearby_lan_parse_result_t parsed =
-        nearby_mdns_parse(s_lan_rx, stats == NULL ? 0u : 0u, &facts);
-    (void)config;
-    (void)stats;
-    (void)type_count;
-    (void)parsed;
-    return ESP_ERR_INVALID_STATE;
+    const ssize_t sent = sendto(fd, query, off, 0,
+                                (const struct sockaddr *)&dest, sizeof(dest));
+    return sent == (ssize_t)off ? ESP_OK : ESP_FAIL;
 }
 
 static esp_err_t mdns_handle_bytes(
@@ -228,7 +227,8 @@ static esp_err_t mdns_handle_bytes(
             continue;
         }
         if (config->observation_cb != NULL) {
-            esp_err_t err = config->observation_cb(service, parsed, config->observation_ctx);
+            const esp_err_t err = config->observation_cb(service, parsed,
+                                                         config->observation_ctx);
             if (err != ESP_OK) {
                 return err;
             }
@@ -247,14 +247,15 @@ static esp_err_t mdns_receive_until(
     uint8_t *type_count)
 {
     while (!elapsed(deadline_start, deadline_ticks)) {
-        int rc = recv_datagram(fd);
+        const int rc = recv_datagram(fd);
         if (rc < 0) {
             return ESP_FAIL;
         }
         if (rc == 0) {
             continue;
         }
-        esp_err_t err = mdns_handle_bytes(config, stats, s_lan_rx, (size_t)rc, type_count);
+        const esp_err_t err = mdns_handle_bytes(config, stats, s_lan_rx,
+                                                (size_t)rc, type_count);
         if (err != ESP_OK) {
             return err;
         }
@@ -276,7 +277,7 @@ esp_err_t nearby_zeroconf_scan_run(const nearby_zeroconf_scan_config_t *config,
     memset(stats, 0, sizeof(*stats));
     memset(s_mdns_types, 0, sizeof(s_mdns_types));
 
-    int fd = udp_socket_with_timeout();
+    const int fd = udp_socket_with_timeout();
     if (fd < 0) {
         return ESP_FAIL;
     }
@@ -289,7 +290,8 @@ esp_err_t nearby_zeroconf_scan_run(const nearby_zeroconf_scan_config_t *config,
         .imr_multiaddr.s_addr = inet_addr("224.0.0.251"),
         .imr_interface.s_addr = ip.addr,
     };
-    if (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &membership, sizeof(membership)) != 0) {
+    if (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+                   &membership, sizeof(membership)) != 0) {
         close(fd);
         return ESP_FAIL;
     }
@@ -298,13 +300,17 @@ esp_err_t nearby_zeroconf_scan_run(const nearby_zeroconf_scan_config_t *config,
 
     err = mdns_send_ptr_query(fd, "_services._dns-sd._udp.local.");
     if (err != ESP_OK) {
+        (void)setsockopt(fd, IPPROTO_IP, IP_DROP_MEMBERSHIP,
+                         &membership, sizeof(membership));
         close(fd);
         return err;
     }
 
     const TickType_t total_ticks = ms_to_nonzero_ticks(config->duration_ms);
     TickType_t discovery_ticks = total_ticks / 3u;
-    if (discovery_ticks == 0) discovery_ticks = 1;
+    if (discovery_ticks == 0) {
+        discovery_ticks = 1;
+    }
     const TickType_t start = xTaskGetTickCount();
     uint8_t type_count = 0;
     err = mdns_receive_until(fd, start, discovery_ticks, config, stats, &type_count);
@@ -320,7 +326,8 @@ esp_err_t nearby_zeroconf_scan_run(const nearby_zeroconf_scan_config_t *config,
         err = mdns_receive_until(fd, start, total_ticks, config, stats, &type_count);
     }
 
-    (void)setsockopt(fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, &membership, sizeof(membership));
+    (void)setsockopt(fd, IPPROTO_IP, IP_DROP_MEMBERSHIP,
+                     &membership, sizeof(membership));
     close(fd);
     return err;
 }
@@ -335,7 +342,7 @@ esp_err_t nearby_ssdp_scan_run(const nearby_ssdp_scan_config_t *config,
         return ESP_ERR_INVALID_STATE;
     }
     memset(stats, 0, sizeof(*stats));
-    int fd = udp_socket_with_timeout();
+    const int fd = udp_socket_with_timeout();
     if (fd < 0) {
         return ESP_FAIL;
     }
@@ -351,8 +358,9 @@ esp_err_t nearby_ssdp_scan_run(const nearby_ssdp_scan_config_t *config,
         .sin_port = htons(SSDP_PORT),
         .sin_addr.s_addr = inet_addr("239.255.255.250"),
     };
-    if (sendto(fd, request, sizeof(request) - 1u, 0,
-               (const struct sockaddr *)&dest, sizeof(dest)) != (ssize_t)(sizeof(request) - 1u)) {
+    const ssize_t sent = sendto(fd, request, sizeof(request) - 1u, 0,
+                                (const struct sockaddr *)&dest, sizeof(dest));
+    if (sent != (ssize_t)(sizeof(request) - 1u)) {
         close(fd);
         return ESP_FAIL;
     }
@@ -361,27 +369,36 @@ esp_err_t nearby_ssdp_scan_run(const nearby_ssdp_scan_config_t *config,
     const TickType_t start = xTaskGetTickCount();
     esp_err_t first_error = ESP_OK;
     while (!elapsed(start, duration)) {
-        int rc = recv_datagram(fd);
+        const int rc = recv_datagram(fd);
         if (rc < 0) {
             first_error = ESP_FAIL;
             break;
         }
-        if (rc == 0) continue;
+        if (rc == 0) {
+            continue;
+        }
         ++stats->datagrams;
         nearby_ssdp_facts_t facts;
-        nearby_lan_parse_result_t parsed = nearby_ssdp_parse(s_lan_rx, (size_t)rc, &facts);
+        const nearby_lan_parse_result_t parsed =
+            nearby_ssdp_parse(s_lan_rx, (size_t)rc, &facts);
         if (parsed == NEARBY_LAN_PARSE_ERR_MALFORMED || parsed == NEARBY_LAN_PARSE_ERR_ARG) {
             ++stats->malformed_datagrams;
             continue;
         }
-        if (parsed == NEARBY_LAN_PARSE_PARTIAL) ++stats->partial_datagrams;
-        if (config->dedup != NULL && !nearby_ssdp_dedup_should_emit(config->dedup, &facts)) {
+        if (parsed == NEARBY_LAN_PARSE_PARTIAL) {
+            ++stats->partial_datagrams;
+        }
+        if (config->dedup != NULL &&
+            !nearby_ssdp_dedup_should_emit(config->dedup, &facts)) {
             ++stats->duplicate_datagrams;
             continue;
         }
         if (config->observation_cb != NULL) {
-            first_error = config->observation_cb(&facts, parsed, config->observation_ctx);
-            if (first_error != ESP_OK) break;
+            first_error = config->observation_cb(&facts, parsed,
+                                                 config->observation_ctx);
+            if (first_error != ESP_OK) {
+                break;
+            }
             ++stats->emitted_datagrams;
         }
     }
@@ -399,7 +416,7 @@ esp_err_t nearby_dhcp_scan_run(const nearby_dhcp_scan_config_t *config,
         return ESP_ERR_INVALID_STATE;
     }
     memset(stats, 0, sizeof(*stats));
-    int fd = udp_socket_with_timeout();
+    const int fd = udp_socket_with_timeout();
     if (fd < 0) {
         return ESP_FAIL;
     }
@@ -414,27 +431,36 @@ esp_err_t nearby_dhcp_scan_run(const nearby_dhcp_scan_config_t *config,
     const TickType_t start = xTaskGetTickCount();
     esp_err_t first_error = ESP_OK;
     while (!elapsed(start, duration)) {
-        int rc = recv_datagram(fd);
+        const int rc = recv_datagram(fd);
         if (rc < 0) {
             first_error = ESP_FAIL;
             break;
         }
-        if (rc == 0) continue;
+        if (rc == 0) {
+            continue;
+        }
         ++stats->datagrams;
         nearby_dhcp_facts_t facts;
-        nearby_lan_parse_result_t parsed = nearby_dhcp_parse(s_lan_rx, (size_t)rc, &facts);
+        const nearby_lan_parse_result_t parsed =
+            nearby_dhcp_parse(s_lan_rx, (size_t)rc, &facts);
         if (parsed == NEARBY_LAN_PARSE_ERR_MALFORMED || parsed == NEARBY_LAN_PARSE_ERR_ARG) {
             ++stats->malformed_datagrams;
             continue;
         }
-        if (parsed == NEARBY_LAN_PARSE_PARTIAL) ++stats->partial_datagrams;
-        if (config->dedup != NULL && !nearby_dhcp_dedup_should_emit(config->dedup, &facts)) {
+        if (parsed == NEARBY_LAN_PARSE_PARTIAL) {
+            ++stats->partial_datagrams;
+        }
+        if (config->dedup != NULL &&
+            !nearby_dhcp_dedup_should_emit(config->dedup, &facts)) {
             ++stats->duplicate_datagrams;
             continue;
         }
         if (config->observation_cb != NULL) {
-            first_error = config->observation_cb(&facts, parsed, config->observation_ctx);
-            if (first_error != ESP_OK) break;
+            first_error = config->observation_cb(&facts, parsed,
+                                                 config->observation_ctx);
+            if (first_error != ESP_OK) {
+                break;
+            }
             ++stats->emitted_datagrams;
         }
     }
