@@ -8,34 +8,113 @@ If older integration notes, frozen-agent documents, historical scanner architect
 
 ## Mission
 
-Refactor NearBy One NEXT from a single integrated scanner firmware into an application-oriented ESP32-C6 handheld platform with two equally supported API paths:
+Refactor NearBy One NEXT from a single integrated scanner firmware into an application-oriented ESP32-C6 handheld platform with three architectural levels:
 
 ```text
 Application
-├──────────────> ESP-IDF / FreeRTOS / LVGL native APIs
-└──> kismet_* ─> ESP-IDF / FreeRTOS / LVGL native APIs
+├──────────────> Native APIs
+├──────────────> kismet_*      acquisition / scanning / observation
+├──────────────> wireshark_*   bounded protocol parsing / dissection
+└──────────────> ha_*          recognition / Device-Entity-State semantics
 ```
 
 The target board remains **Waveshare ESP32-C6-Touch-LCD-1.9**.
 
 ## Architecture rules
 
-1. Native ESP-IDF, FreeRTOS, NimBLE, IEEE 802.15.4, storage, and LVGL APIs remain directly available to applications.
+1. Native ESP-IDF, FreeRTOS, NimBLE, lwIP, IEEE 802.15.4, storage, and LVGL APIs remain directly available to applications.
 2. Do not create wrappers whose main purpose is renaming a native API.
 3. Keep BSP code limited to board-specific knowledge, hardware bring-up, shared-bus topology, and access to native handles.
-4. All project-owned reusable high-level convenience/workflow APIs use the `kismet_*` namespace.
-5. A `kismet_*` API must add meaningful orchestration, parsing, normalization, resource coordination, state preservation, bounded result handling, or other reusable behavior.
-6. Kismet APIs do not permanently own hardware resources. They must coexist with applications using native APIs directly.
-7. Do not create replacement UI, RTOS, radio, storage, or networking frameworks parallel to LVGL/FreeRTOS/ESP-IDF without a concrete product requirement approved by the user.
-8. Existing scanner code is migration material. Preserve useful behavior, not obsolete component boundaries.
-9. Keep dependency direction one-way: App -> Kismet -> Native, while App may also call Native directly.
-10. Keep the tree buildable during staged migration.
+4. Public Level-2 APIs are organized by upstream project identity only when a real reusable capability exists.
+5. Do not create a namespace merely because a project was researched or used as a behavioral reference.
+6. The first public firmware API families are `kismet_*`, `wireshark_*`, and `ha_*`.
+7. Scapy remains host/test tooling unless a concrete firmware capability later justifies otherwise.
+8. Bettercap, Aircrack-ng, hcxdumptool, BtleJack, nRF Sniffer, Responder, mitmproxy, and other researched projects remain provenance/reference sources until they gain distinct reusable runtime behavior.
+9. Existing `nearby_*` public names are migration input, not the target umbrella API design.
+10. Multiple project APIs may share internal implementations. Do not duplicate parser/scanner code just to preserve namespace identity.
+11. Applications may combine native APIs and any Level-2 project APIs freely.
+12. Do not create replacement UI, RTOS, radio, storage, packet, or networking frameworks parallel to LVGL/FreeRTOS/ESP-IDF without a concrete reusable requirement approved by the user.
+13. Existing scanner code is migration material. Preserve useful behavior, not obsolete component boundaries.
+14. Keep the tree buildable during staged migration.
+
+## Public API roles
+
+Use these defaults when deciding ownership:
+
+```text
+kismet_*       acquire observations
+wireshark_*    parse/dissect protocol data
+ha_*           recognize/model device semantics
+native APIs    direct low-level control
+application    product workflow/UI/policy
+```
+
+Do not force an API into a project namespace when the implementation does not actually provide that project's distinct reusable capability.
+
+## Kismet boundary
+
+Kismet owns finite acquisition workflows such as Wi-Fi active/passive scans, BLE scans, IEEE 802.15.4 scans, LAN discovery scans, bounded deduplication, observation statistics, and useful scan mechanics.
+
+It does not own trivial aliases for native lifecycle functions.
+
+Good:
+
+```c
+kismet_wifi_scan_passive(...);
+kismet_ble_scan(...);
+kismet_i154_scan(...);
+```
+
+Bad:
+
+```c
+kismet_wifi_stop(); /* if it only forwards to esp_wifi_stop() */
+```
+
+Whole-product scan ordering, enabled modules, progress UI, touch locking, and fixed “scan all” policy belong to the application unless they become independently reusable across Apps.
+
+## Wireshark boundary
+
+Wireshark owns bounded dissector-style parsing helpers migrated from the existing parser code, including where applicable:
+
+```c
+wireshark_80211_parse_mgmt(...);
+wireshark_ble_parse_adv(...);
+wireshark_mdns_parse(...);
+wireshark_ssdp_parse(...);
+wireshark_dhcp_parse(...);
+wireshark_i154_parse_mac(...);
+wireshark_zigbee_parse(...);
+```
+
+Preserve fixed storage limits, malformed/partial handling, and native metadata needed by applications.
+
+Do not claim a protocol parser exists under a Wireshark name when the firmware currently implements only a higher-level discovery semantic subset.
+
+## Home Assistant boundary
+
+Home Assistant owns typed device recognition and the RAM-bounded Device / Entity / State semantic API.
+
+Target recognition examples:
+
+```c
+ha_match_ble(...);
+ha_match_zeroconf(...);
+ha_match_ssdp(...);
+ha_match_dhcp(...);
+ha_match_zigbee(...);
+ha_match_matter(...);
+```
+
+Existing `ha_device_*`, `ha_entity_*`, `ha_state_*`, and service APIs should be retained/stabilized where useful.
+
+HA semantics are optional per App. A Wi-Fi Analyzer or Packet Inspector must not be forced through HA Device/Entity/State.
 
 ## Resource ownership
 
 The ESP32-C6 radio, Wi-Fi state, NimBLE state, IEEE 802.15.4 state, shared LCD/SD SPI bus, storage, and LVGL owner task are shared resources.
 
-Kismet workflows should generally follow:
+High-level acquisition workflows should generally follow:
 
 ```text
 inspect current state
@@ -45,7 +124,7 @@ inspect current state
 -> release lease/lock
 ```
 
-A small resource coordinator for leases/mutexes/cancellation is allowed. It must not become another HAL or mirror the native driver API.
+A small internal resource coordinator for leases/mutexes/cancellation is allowed. It must not become another HAL or mirror native driver APIs.
 
 ## Migration direction
 
@@ -54,36 +133,17 @@ Current code should move roughly as follows:
 ```text
 nearby_board          -> narrow BSP
 nearby_lvgl_port      -> thin lvgl_port
-radio_runtime         -> remove wrapper role; use native APIs directly
-scan_coordinator      -> kismet scan/session workflow
-scan_session          -> kismet resource/session logic
-discovery_parser      -> kismet parser/network capabilities
-nearby_scan_pipeline  -> split between Kismet composition and application logic
+radio_runtime         -> remove rename-wrapper role; direct native lifecycle + internal resource support
+native_handoff        -> retain useful bounded callback handoff internally
+scan_coordinator      -> split reusable mechanics from App fixed scan policy
+scan_session          -> internal resource/Kismet acquisition support
+discovery_parser      -> wireshark_* parsers + kismet_* acquisition + ha_* semantic adapters
+recognition_db        -> bounded recognition implementation behind ha_* matching entry points where appropriate
+ha_core               -> stable ha_* semantic APIs
+nearby_scan_pipeline  -> mostly App composition; migrate reusable mechanics downward
+nearby_semantic_apply -> App glue
 main.c                -> boot + platform/app runtime startup only
 ```
-
-Recognition/database functionality should be retained where useful but exposed through the new dependency model rather than forcing applications through the previous scanner pipeline.
-
-## Kismet API naming
-
-Public project-owned high-level functions should follow:
-
-```c
-kismet_<domain>_<action>()
-```
-
-Examples:
-
-```text
-kismet_wifi_scan()
-kismet_ble_scan()
-kismet_mdns_discover()
-kismet_device_recognize()
-kismet_scan_start()
-kismet_scan_all()
-```
-
-Do not add trivial aliases such as `kismet_wifi_stop()` when they merely forward to `esp_wifi_stop()`.
 
 ## BSP boundary
 
@@ -103,13 +163,21 @@ The BSP must not own scanning, protocol parsing, recognition, UI pages, or appli
 
 LVGL is exposed directly to applications.
 
-A thin port may initialize the display/touch integration and enforce the LVGL owner-task rule, but do not build `nearby_ui_*` or `kismet_ui_*` wrappers that mirror ordinary `lv_*` widgets/functions.
+A thin port may initialize display/touch integration and enforce the LVGL owner-task rule, but do not build wrapper APIs that mirror ordinary `lv_*` widgets/functions.
 
 ## FreeRTOS rule
 
-Applications and Kismet may directly use FreeRTOS tasks, queues, mutexes, event groups, and timers.
+Applications and Level-2 modules may directly use FreeRTOS tasks, queues, mutexes, event groups, and timers.
 
 Do not create a second project-specific RTOS abstraction solely for naming consistency.
+
+## Provenance and licensing
+
+When behavior is materially copied, translated, adapted, generated, or derived from an upstream project, preserve the relevant repository, immutable revision/tag, source path, license, and provenance classification.
+
+A public namespace is not a substitute for legal/source provenance documentation.
+
+Reference-only sources must remain reference-only unless project distribution policy explicitly permits incorporation.
 
 ## Build baseline
 
@@ -139,10 +207,12 @@ Passive discovery, protocol parsing, diagnostics, packet observation/capture whe
 
 Do not add credential theft, unauthorized access, destructive RF interference, persistence on third-party devices, or access-control bypass features.
 
+Researching or referencing a security project does not imply that all of its offensive capabilities belong in NearBy One NEXT.
+
 ## Working principle
 
 When deciding where code belongs, use this rule:
 
-> Native APIs provide the primitives. Kismet provides reusable recipes. Apps provide product experiences.
+> Native APIs provide primitives. Kismet acquires. Wireshark dissects. Home Assistant understands. Apps compose product experiences.
 
 That is the architecture to preserve throughout this refactor.
