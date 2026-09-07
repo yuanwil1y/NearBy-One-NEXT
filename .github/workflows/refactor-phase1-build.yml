@@ -1,4 +1,4 @@
-name: Refactor Phase 2 parser split
+name: Refactor Phase 3 Kismet acquisition
 
 on:
   push:
@@ -18,6 +18,15 @@ jobs:
       - name: Compile public API ownership contract
         run: bash tests/host/run_phase1_public_api_test.sh
 
+      - name: Verify Phase 3 runtime ownership and parser direction
+        run: python tests/host/test_phase3_kismet_runtime_contract.py
+
+      - name: Verify scan coordinator uses Kismet primitives
+        run: |
+          INC="-Itests/host/fixtures/d_frozen/include -Ifirmware/components/scan_coordinator/include -Ifirmware/components/discovery_parser/include -Ifirmware/components/kismet/include -Ifirmware/components/wireshark/include"
+          gcc -std=c11 -Wall -Wextra -Werror $INC firmware/components/scan_coordinator/scan_default_runners.c tests/host/test_default_runner_wiring.c -o /tmp/test_default_runner
+          /tmp/test_default_runner
+
       - name: Run Wireshark parser regression vectors
         run: |
           INC="-Ifirmware/components/discovery_parser/include -Ifirmware/components/wireshark/include -Ifirmware/components/kismet/include -Ifirmware/components/home_assistant/include"
@@ -35,69 +44,40 @@ jobs:
           gcc -std=c11 -Wall -Wextra -Werror $INC $TARGET firmware/components/wireshark/ble_ad_parser.c firmware/components/discovery_parser/matcher_keys.c firmware/components/home_assistant/matter_discovery.c tests/host/test_matter_discovery.c -o /tmp/test_matter
           /tmp/test_matter
 
+      - name: Run Kismet dedup and legacy compatibility regressions
+        run: |
+          INC="-Ifirmware/components/discovery_parser/include -Ifirmware/components/wireshark/include -Ifirmware/components/kismet/include -Ifirmware/components/home_assistant/include"
+          gcc -std=c11 -Wall -Wextra -Werror $INC -Itests/host/fixtures/c_current firmware/components/discovery_parser/matcher_keys.c firmware/components/kismet/transport_dedup.c firmware/components/discovery_parser/transport_dedup.c tests/host/test_dedup_matcher_keys.c -o /tmp/test_dedup
+          /tmp/test_dedup
+          gcc -std=c11 -Wall -Wextra -Werror $INC firmware/components/kismet/transport_dedup.c tests/host/test_kismet_dedup.c -o /tmp/test_kismet_dedup
+          /tmp/test_kismet_dedup
+
       - name: Run HA recognition adapter contract
         run: |
           python tests/host/build_b_to_c_fixture.py tools/dbgen /tmp/b-to-c-contract.nbdb
           INC="-Icomponents/recognition_db/include -Ifirmware/components/discovery_parser/include -Ifirmware/components/wireshark/include -Ifirmware/components/home_assistant/include"
           TARGET="-include tests/host/phase2_target_api_aliases.h"
-          gcc -std=c11 -Wall -Wextra -Werror $INC $TARGET \
-            firmware/components/wireshark/ble_ad_parser.c \
-            firmware/components/home_assistant/recognition_adapter.c \
-            components/recognition_db/nearby_recognition_db.c \
-            components/recognition_db/nearby_recognition_match.c \
-            tests/host/test_b_to_c_contract.c \
-            -o /tmp/test_b_to_c_contract
+          gcc -std=c11 -Wall -Wextra -Werror $INC $TARGET firmware/components/wireshark/ble_ad_parser.c firmware/components/home_assistant/recognition_adapter.c components/recognition_db/nearby_recognition_db.c components/recognition_db/nearby_recognition_match.c tests/host/test_b_to_c_contract.c -o /tmp/test_b_to_c_contract
           /tmp/test_b_to_c_contract /tmp/b-to-c-contract.nbdb
-
-      - name: Run unchanged dedup and matcher-key regressions
-        run: |
-          INC="-Ifirmware/components/discovery_parser/include -Ifirmware/components/wireshark/include -Ifirmware/components/kismet/include -Ifirmware/components/home_assistant/include"
-          gcc -std=c11 -Wall -Wextra -Werror $INC -Itests/host/fixtures/c_current firmware/components/discovery_parser/matcher_keys.c firmware/components/discovery_parser/transport_dedup.c tests/host/test_dedup_matcher_keys.c -o /tmp/test_dedup
-          /tmp/test_dedup
 
       - name: Verify legacy parser and HA compatibility symbols
         run: |
           INC="-Icomponents/recognition_db/include -Ifirmware/components/discovery_parser/include -Ifirmware/components/wireshark/include -Ifirmware/components/kismet/include -Ifirmware/components/home_assistant/include"
-          gcc -std=c11 -Wall -Wextra -Werror $INC \
-            firmware/components/wireshark/ble_ad_parser.c \
-            firmware/components/wireshark/mdns_parser.c \
-            firmware/components/wireshark/ssdp_parser.c \
-            firmware/components/wireshark/dhcp_parser.c \
-            firmware/components/wireshark/wifi_management_parser.c \
-            firmware/components/wireshark/i154_mac_parser.c \
-            firmware/components/wireshark/zigbee_discovery.c \
-            firmware/components/home_assistant/matter_discovery.c \
-            firmware/components/home_assistant/recognition_adapter.c \
-            firmware/components/discovery_parser/ble_ad_parser.c \
-            firmware/components/discovery_parser/mdns_parser.c \
-            firmware/components/discovery_parser/ssdp_parser.c \
-            firmware/components/discovery_parser/dhcp_parser.c \
-            firmware/components/discovery_parser/wifi_management_parser.c \
-            firmware/components/discovery_parser/i154_mac_parser.c \
-            firmware/components/discovery_parser/zigbee_discovery.c \
-            firmware/components/discovery_parser/matter_discovery.c \
-            firmware/components/discovery_parser/recognition_adapter.c \
-            components/recognition_db/nearby_recognition_db.c \
-            components/recognition_db/nearby_recognition_match.c \
-            tests/host/test_phase2_legacy_compat.c \
-            -o /tmp/test_phase2_legacy_compat
+          gcc -std=c11 -Wall -Wextra -Werror $INC firmware/components/wireshark/ble_ad_parser.c firmware/components/wireshark/mdns_parser.c firmware/components/wireshark/ssdp_parser.c firmware/components/wireshark/dhcp_parser.c firmware/components/wireshark/wifi_management_parser.c firmware/components/wireshark/i154_mac_parser.c firmware/components/wireshark/zigbee_discovery.c firmware/components/home_assistant/matter_discovery.c firmware/components/home_assistant/recognition_adapter.c firmware/components/discovery_parser/ble_ad_parser.c firmware/components/discovery_parser/mdns_parser.c firmware/components/discovery_parser/ssdp_parser.c firmware/components/discovery_parser/dhcp_parser.c firmware/components/discovery_parser/wifi_management_parser.c firmware/components/discovery_parser/i154_mac_parser.c firmware/components/discovery_parser/zigbee_discovery.c firmware/components/discovery_parser/matter_discovery.c firmware/components/discovery_parser/recognition_adapter.c components/recognition_db/nearby_recognition_db.c components/recognition_db/nearby_recognition_match.c tests/host/test_phase2_legacy_compat.c -o /tmp/test_phase2_legacy_compat
           /tmp/test_phase2_legacy_compat
 
       - name: Run malformed parser sanitizer regression
         run: |
           INC="-Ifirmware/components/discovery_parser/include -Ifirmware/components/wireshark/include -Ifirmware/components/kismet/include -Ifirmware/components/home_assistant/include"
           TARGET="-include tests/host/phase2_target_api_aliases.h"
-          gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $INC $TARGET \
-            firmware/components/wireshark/ble_ad_parser.c \
-            firmware/components/wireshark/mdns_parser.c \
-            firmware/components/wireshark/ssdp_parser.c \
-            firmware/components/wireshark/dhcp_parser.c \
-            firmware/components/wireshark/wifi_management_parser.c \
-            firmware/components/wireshark/i154_mac_parser.c \
-            firmware/components/wireshark/zigbee_discovery.c \
-            tests/host/test_parser_fuzz.c \
-            -o /tmp/test_fuzz
+          gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $INC $TARGET firmware/components/wireshark/ble_ad_parser.c firmware/components/wireshark/mdns_parser.c firmware/components/wireshark/ssdp_parser.c firmware/components/wireshark/dhcp_parser.c firmware/components/wireshark/wifi_management_parser.c firmware/components/wireshark/i154_mac_parser.c firmware/components/wireshark/zigbee_discovery.c tests/host/test_parser_fuzz.c -o /tmp/test_fuzz
           /tmp/test_fuzz
+
+      - name: Run Kismet dedup sanitizer regression
+        run: |
+          INC="-Ifirmware/components/wireshark/include -Ifirmware/components/kismet/include"
+          gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $INC firmware/components/kismet/transport_dedup.c tests/host/test_kismet_dedup.c -o /tmp/test_kismet_dedup_san
+          /tmp/test_kismet_dedup_san
 
   esp-idf-build:
     runs-on: ubuntu-latest

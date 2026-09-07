@@ -78,7 +78,7 @@ typedef struct {
     uint32_t emitted_datagrams;
 } kismet_dhcp_scan_stats_t;
 
-/* Phase 1 contracts; implementations remain under nearby_* until Phase 3. */
+/* Finite LAN discovery primitives. Product sequencing remains external. */
 bool kismet_lan_scan_prerequisite_ready(void);
 
 esp_err_t kismet_mdns_discover(const kismet_mdns_scan_config_t *config,

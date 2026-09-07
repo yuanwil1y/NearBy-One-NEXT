@@ -58,7 +58,7 @@ typedef struct {
     uint8_t channels_completed;
 } kismet_wifi_passive_scan_stats_t;
 
-/* Phase 1 contracts; implementations remain under nearby_* until Phase 3. */
+/* Finite Wi-Fi acquisition primitives. Product sequencing remains external. */
 esp_err_t kismet_wifi_scan_active(
     const kismet_wifi_active_scan_config_t *config,
     kismet_wifi_active_scan_stats_t *stats);

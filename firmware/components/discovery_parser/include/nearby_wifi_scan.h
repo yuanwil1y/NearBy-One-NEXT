@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-/* Phase 1 compatibility aliases. Kismet owns finite Wi-Fi acquisition types. */
+/* Phase 3 compatibility aliases. Kismet owns finite Wi-Fi acquisition. */
 #define NEARBY_WIFI_ACTIVE_RECORD_MAX KISMET_WIFI_ACTIVE_RECORD_MAX
 typedef kismet_wifi_active_cb_t nearby_wifi_active_cb_t;
 typedef kismet_wifi_passive_cb_t nearby_wifi_passive_cb_t;
@@ -17,14 +17,11 @@ typedef kismet_wifi_active_scan_stats_t nearby_wifi_active_scan_stats_t;
 typedef kismet_wifi_passive_scan_config_t nearby_wifi_passive_scan_config_t;
 typedef kismet_wifi_passive_scan_stats_t nearby_wifi_passive_scan_stats_t;
 
-/* Legacy symbols retained until the Phase 3 acquisition migration. */
-esp_err_t nearby_wifi_active_scan_run(
-    const nearby_wifi_active_scan_config_t *config,
-    nearby_wifi_active_scan_stats_t *stats);
-
-esp_err_t nearby_wifi_passive_scan_run(
-    const nearby_wifi_passive_scan_config_t *config,
-    nearby_wifi_passive_scan_stats_t *stats);
+/* Legacy link symbols forward to the Kismet implementation. */
+esp_err_t nearby_wifi_active_scan_run(const nearby_wifi_active_scan_config_t *config,
+                                      nearby_wifi_active_scan_stats_t *stats);
+esp_err_t nearby_wifi_passive_scan_run(const nearby_wifi_passive_scan_config_t *config,
+                                       nearby_wifi_passive_scan_stats_t *stats);
 
 #ifdef __cplusplus
 }

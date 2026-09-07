@@ -39,7 +39,7 @@ typedef struct {
     uint8_t channels_completed;
 } kismet_i154_scan_stats_t;
 
-/* Phase 1 contract; implementation remains under nearby_i154_scan_run(). */
+/* Finite IEEE 802.15.4 acquisition primitive. Product sequencing is external. */
 esp_err_t kismet_i154_scan(const kismet_i154_scan_config_t *config,
                            kismet_i154_scan_stats_t *stats);
 

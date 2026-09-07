@@ -40,7 +40,7 @@ typedef struct {
     uint32_t extended_drops_after;
 } kismet_ble_scan_stats_t;
 
-/* Phase 1 contract; implementation remains under nearby_ble_scan_run(). */
+/* Finite BLE acquisition primitive. Product sequencing remains external. */
 esp_err_t kismet_ble_scan(const kismet_ble_scan_config_t *config,
                           kismet_ble_scan_stats_t *stats);
 

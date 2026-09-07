@@ -8,15 +8,14 @@
 extern "C" {
 #endif
 
-/* Phase 1 compatibility aliases. Kismet owns finite BLE acquisition types. */
+/* Phase 3 compatibility aliases. Kismet owns finite BLE acquisition. */
 typedef kismet_ble_observation_cb_t nearby_ble_observation_cb_t;
 typedef kismet_ble_scan_config_t nearby_ble_scan_config_t;
 typedef kismet_ble_scan_stats_t nearby_ble_scan_stats_t;
 
-/* Legacy symbol retained until the Phase 3 acquisition migration. */
-esp_err_t nearby_ble_scan_run(
-    const nearby_ble_scan_config_t *config,
-    nearby_ble_scan_stats_t *stats);
+/* Legacy link symbol forwards to the Kismet implementation. */
+esp_err_t nearby_ble_scan_run(const nearby_ble_scan_config_t *config,
+                              nearby_ble_scan_stats_t *stats);
 
 #ifdef __cplusplus
 }
