@@ -1,4 +1,21 @@
 idf_component_register(
+    SRCS
+        "wifi_scan_runtime.c"
+        "ble_scan_runtime.c"
+        "i154_scan_runtime.c"
+        "lan_scan_runtime.c"
+        "transport_dedup.c"
     INCLUDE_DIRS "include"
-    REQUIRES wireshark freertos esp_common
+    REQUIRES
+        wireshark
+        native_handoff
+        radio_runtime
+        scan_session
+        bt
+        esp_wifi
+        esp_netif
+        lwip
+        ieee802154
+        freertos
+        esp_common
 )

@@ -14,7 +14,8 @@
 extern "C" {
 #endif
 
-/* Phase 1 contracts; implementations remain in discovery_parser until Phase 3. */
+/* Bounded, scan-generation dedup owned by Kismet acquisition. */
+void kismet_dedup_init(kismet_dedup_t *state, uint32_t generation);
 void kismet_dedup_reset(kismet_dedup_t *state, uint32_t generation);
 
 bool kismet_ble_dedup_should_emit(
