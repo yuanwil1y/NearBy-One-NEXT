@@ -9,7 +9,8 @@ move parser, scanner, radio-lifecycle, or Scanner App implementation.
 | BLE advertisement facts/parser contract | `wireshark_ble.h` | implementation remains in `discovery_parser` |
 | mDNS/SSDP/DHCP parser contracts | `wireshark_mdns.h`, `wireshark_ssdp.h`, `wireshark_dhcp.h` | implementation remains in `discovery_parser` |
 | IEEE 802.15.4 / Zigbee parser contracts | `wireshark_i154.h`, `wireshark_zigbee.h` | implementation remains in `discovery_parser` |
-| Wi-Fi/BLE/802.15.4/LAN finite scan contracts | `kismet_*.h` | implementation remains in `discovery_parser` |
+| Wi-Fi/BLE/802.15.4 finite scan contracts | `kismet_*.h` | implementation remains in `discovery_parser` |
+| LAN acquisition contracts: `kismet_mdns_discover()`, `kismet_ssdp_discover()`, `kismet_dhcp_observe()` | `kismet_lan.h` | implementation remains in `discovery_parser` |
 | Generation-scoped scan dedup state | `kismet_dedup.h` | implementation remains in `discovery_parser` |
 | Matter discovery semantics | `ha_discovery.h` | implementation remains in `discovery_parser` |
 | Typed BLE/Zeroconf/SSDP/DHCP recognition | `ha_recognition.h` | adapter implementation remains in `discovery_parser`; `.nbdb` runtime remains in `recognition_db` |

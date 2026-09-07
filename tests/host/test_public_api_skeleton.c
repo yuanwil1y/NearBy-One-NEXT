@@ -69,6 +69,29 @@ _Static_assert(NEARBY_MATTER_PARSE_NOT_MATTER ==
 _Static_assert(HA_MATCH_AMBIGUOUS == NEARBY_DB_MATCH_AMBIGUOUS,
                "recognition ambiguity semantics changed");
 
+typedef esp_err_t (*kismet_mdns_discover_fn_t)(
+    const kismet_mdns_scan_config_t *,
+    kismet_mdns_scan_stats_t *);
+typedef esp_err_t (*kismet_ssdp_discover_fn_t)(
+    const kismet_ssdp_scan_config_t *,
+    kismet_ssdp_scan_stats_t *);
+typedef esp_err_t (*kismet_dhcp_observe_fn_t)(
+    const kismet_dhcp_scan_config_t *,
+    kismet_dhcp_scan_stats_t *);
+
+_Static_assert(_Generic(&kismet_mdns_discover,
+                        kismet_mdns_discover_fn_t: 1,
+                        default: 0),
+               "mDNS Kismet public contract changed");
+_Static_assert(_Generic(&kismet_ssdp_discover,
+                        kismet_ssdp_discover_fn_t: 1,
+                        default: 0),
+               "SSDP Kismet public contract changed");
+_Static_assert(_Generic(&kismet_dhcp_observe,
+                        kismet_dhcp_observe_fn_t: 1,
+                        default: 0),
+               "DHCP Kismet public contract changed");
+
 int main(void)
 {
     return 0;

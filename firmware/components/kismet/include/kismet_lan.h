@@ -81,12 +81,12 @@ typedef struct {
 /* Phase 1 contracts; implementations remain under nearby_* until Phase 3. */
 bool kismet_lan_scan_prerequisite_ready(void);
 
-esp_err_t kismet_mdns_scan(const kismet_mdns_scan_config_t *config,
-                           kismet_mdns_scan_stats_t *stats);
-esp_err_t kismet_ssdp_scan(const kismet_ssdp_scan_config_t *config,
-                           kismet_ssdp_scan_stats_t *stats);
-esp_err_t kismet_dhcp_scan(const kismet_dhcp_scan_config_t *config,
-                           kismet_dhcp_scan_stats_t *stats);
+esp_err_t kismet_mdns_discover(const kismet_mdns_scan_config_t *config,
+                               kismet_mdns_scan_stats_t *stats);
+esp_err_t kismet_ssdp_discover(const kismet_ssdp_scan_config_t *config,
+                               kismet_ssdp_scan_stats_t *stats);
+esp_err_t kismet_dhcp_observe(const kismet_dhcp_scan_config_t *config,
+                              kismet_dhcp_scan_stats_t *stats);
 
 #ifdef __cplusplus
 }
