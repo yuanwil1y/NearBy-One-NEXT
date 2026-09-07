@@ -1,0 +1,21 @@
+#pragma once
+
+#include "wireshark_i154.h"
+#include "wireshark_zigbee.h"
+
+#define NEARBY_ZIGBEE_MAX_CLUSTERS WIRESHARK_ZIGBEE_MAX_CLUSTERS
+#define NEARBY_ZIGBEE_MAX_ENDPOINTS WIRESHARK_ZIGBEE_MAX_ENDPOINTS
+#define NEARBY_ZIGBEE_MANUFACTURER_MAX WIRESHARK_ZIGBEE_MANUFACTURER_MAX
+#define NEARBY_ZIGBEE_MODEL_MAX WIRESHARK_ZIGBEE_MODEL_MAX
+
+typedef wireshark_i154_mac_facts_t nearby_i154_mac_facts_t;
+typedef wireshark_zigbee_parse_result_t nearby_zigbee_parse_result_t;
+#define NEARBY_ZIGBEE_PARSE_OK WIRESHARK_ZIGBEE_PARSE_OK
+#define NEARBY_ZIGBEE_PARSE_SECURED WIRESHARK_ZIGBEE_PARSE_SECURED
+#define NEARBY_ZIGBEE_PARSE_UNSUPPORTED WIRESHARK_ZIGBEE_PARSE_UNSUPPORTED
+#define NEARBY_ZIGBEE_PARSE_PARTIAL WIRESHARK_ZIGBEE_PARSE_PARTIAL
+#define NEARBY_ZIGBEE_PARSE_ERR_ARG WIRESHARK_ZIGBEE_PARSE_ERR_ARG
+#define NEARBY_ZIGBEE_PARSE_ERR_MALFORMED WIRESHARK_ZIGBEE_PARSE_ERR_MALFORMED
+
+typedef wireshark_zigbee_discovery_facts_t nearby_zigbee_discovery_facts_t;
+#define nearby_zigbee_parse_from_mac wireshark_zigbee_parse

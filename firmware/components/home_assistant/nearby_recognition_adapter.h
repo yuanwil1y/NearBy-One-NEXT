@@ -1,0 +1,27 @@
+#pragma once
+
+#include "ha_recognition.h"
+
+typedef wireshark_ble_observation_t nearby_ble_normalized_t;
+typedef wireshark_mdns_service_t nearby_mdns_service_t;
+typedef wireshark_ssdp_facts_t nearby_ssdp_facts_t;
+typedef wireshark_dhcp_facts_t nearby_dhcp_facts_t;
+
+#define NEARBY_BLE_UUID_STR_LEN WIRESHARK_BLE_UUID_STR_LEN
+#define NEARBY_BLE_LOCAL_NAME_MAX WIRESHARK_BLE_LOCAL_NAME_MAX
+#define NEARBY_BLE_MAX_SERVICE_UUIDS WIRESHARK_BLE_MAX_SERVICE_UUIDS
+#define NEARBY_BLE_MAX_SERVICE_DATA WIRESHARK_BLE_MAX_SERVICE_DATA
+#define NEARBY_BLE_MAX_MANUFACTURER_DATA WIRESHARK_BLE_MAX_MANUFACTURER_DATA
+#define NEARBY_MDNS_MAX_TXT WIRESHARK_MDNS_MAX_TXT
+#define NEARBY_MDNS_TXT_KEY_MAX WIRESHARK_MDNS_TXT_KEY_MAX
+#define NEARBY_MDNS_TXT_VALUE_MAX WIRESHARK_MDNS_TXT_VALUE_MAX
+#define NEARBY_MDNS_NAME_MAX WIRESHARK_MDNS_NAME_MAX
+#define NEARBY_DHCP_HOSTNAME_MAX WIRESHARK_DHCP_HOSTNAME_MAX
+
+typedef wireshark_ble_uuid_t nearby_ble_uuid_t;
+#define nearby_ble_uuid_format wireshark_ble_uuid_format
+#define nearby_recognition_match_ble ha_match_ble
+#define nearby_recognition_match_zeroconf ha_match_zeroconf
+#define nearby_recognition_match_ssdp ha_match_ssdp
+#define nearby_recognition_match_dhcp ha_match_dhcp
+#define nearby_recognition_result_is_usable ha_match_result_is_usable

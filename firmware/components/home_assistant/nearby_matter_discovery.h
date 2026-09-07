@@ -1,0 +1,24 @@
+#pragma once
+
+#include "ha_discovery.h"
+
+typedef wireshark_ble_uuid_t nearby_ble_uuid_t;
+typedef wireshark_ble_service_data_t nearby_ble_service_data_t;
+typedef wireshark_ble_observation_t nearby_ble_normalized_t;
+typedef wireshark_mdns_txt_t nearby_mdns_txt_t;
+typedef wireshark_mdns_service_t nearby_mdns_service_t;
+
+typedef ha_matter_discovery_result_t nearby_matter_parse_result_t;
+#define NEARBY_MATTER_PARSE_OK HA_MATTER_DISCOVERY_OK
+#define NEARBY_MATTER_PARSE_PARTIAL HA_MATTER_DISCOVERY_PARTIAL
+#define NEARBY_MATTER_PARSE_NOT_MATTER HA_MATTER_DISCOVERY_NOT_MATTER
+#define NEARBY_MATTER_PARSE_ERR_ARG HA_MATTER_DISCOVERY_ERR_ARG
+#define NEARBY_MATTER_PARSE_ERR_MALFORMED HA_MATTER_DISCOVERY_ERR_MALFORMED
+
+typedef ha_matter_source_t nearby_matter_source_t;
+#define NEARBY_MATTER_SOURCE_BLE HA_MATTER_SOURCE_BLE
+#define NEARBY_MATTER_SOURCE_MDNS HA_MATTER_SOURCE_MDNS
+
+typedef ha_matter_discovery_facts_t nearby_matter_discovery_facts_t;
+#define nearby_matter_from_ble ha_matter_from_ble
+#define nearby_matter_from_mdns ha_matter_from_mdns

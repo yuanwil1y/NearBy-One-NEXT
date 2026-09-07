@@ -1,0 +1,28 @@
+#pragma once
+
+/*
+ * Keep the Phase 1 regression vectors byte-for-byte equivalent while compiling
+ * them against the Phase 2 implementation owners. Legacy symbols are tested
+ * separately in test_phase2_legacy_compat.c.
+ */
+#define nearby_ble_parse_advertisement wireshark_ble_parse_adv
+#define nearby_ble_uuid_format wireshark_ble_uuid_format
+#define nearby_ble_find_manufacturer_data wireshark_ble_find_manufacturer_data
+#define nearby_ble_find_service_data wireshark_ble_find_service_data
+#define nearby_ble_has_service_uuid wireshark_ble_has_service_uuid
+
+#define nearby_mdns_parse wireshark_mdns_parse
+#define nearby_ssdp_parse wireshark_ssdp_parse
+#define nearby_dhcp_parse wireshark_dhcp_parse
+#define nearby_wifi_parse_management_frame wireshark_80211_parse_mgmt
+#define nearby_i154_parse_mac wireshark_i154_parse_mac
+#define nearby_zigbee_parse_from_mac wireshark_zigbee_parse
+
+#define nearby_matter_from_ble ha_matter_from_ble
+#define nearby_matter_from_mdns ha_matter_from_mdns
+
+#define nearby_recognition_match_ble ha_match_ble
+#define nearby_recognition_match_zeroconf ha_match_zeroconf
+#define nearby_recognition_match_ssdp ha_match_ssdp
+#define nearby_recognition_match_dhcp ha_match_dhcp
+#define nearby_recognition_result_is_usable ha_match_result_is_usable
