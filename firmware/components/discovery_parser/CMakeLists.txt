@@ -19,5 +19,18 @@ idf_component_register(
         "zigbee_discovery.c"
         "matter_discovery.c"
     INCLUDE_DIRS "include"
-    REQUIRES native_handoff radio_runtime scan_session recognition_db bt esp_wifi esp_netif lwip ieee802154 freertos
+    REQUIRES
+        kismet
+        wireshark
+        home_assistant
+        native_handoff
+        radio_runtime
+        scan_session
+        recognition_db
+        bt
+        esp_wifi
+        esp_netif
+        lwip
+        ieee802154
+        freertos
 )

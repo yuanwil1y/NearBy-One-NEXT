@@ -1,8 +1,6 @@
 #pragma once
 
-#include <stdbool.h>
-#include <stdint.h>
-
+#include "ha_discovery.h"
 #include "nearby_ble_discovery.h"
 #include "nearby_lan_discovery.h"
 
@@ -10,40 +8,21 @@
 extern "C" {
 #endif
 
-typedef enum {
-    NEARBY_MATTER_PARSE_OK = 0,
-    NEARBY_MATTER_PARSE_PARTIAL = 1,
-    NEARBY_MATTER_PARSE_NOT_MATTER = 2,
-    NEARBY_MATTER_PARSE_ERR_ARG = -1,
-    NEARBY_MATTER_PARSE_ERR_MALFORMED = -2,
-} nearby_matter_parse_result_t;
+/* Phase 1 compatibility aliases. Matter discovery semantics belong to HA. */
+typedef ha_matter_discovery_result_t nearby_matter_parse_result_t;
+#define NEARBY_MATTER_PARSE_OK HA_MATTER_DISCOVERY_OK
+#define NEARBY_MATTER_PARSE_PARTIAL HA_MATTER_DISCOVERY_PARTIAL
+#define NEARBY_MATTER_PARSE_NOT_MATTER HA_MATTER_DISCOVERY_NOT_MATTER
+#define NEARBY_MATTER_PARSE_ERR_ARG HA_MATTER_DISCOVERY_ERR_ARG
+#define NEARBY_MATTER_PARSE_ERR_MALFORMED HA_MATTER_DISCOVERY_ERR_MALFORMED
 
-typedef enum {
-    NEARBY_MATTER_SOURCE_BLE = 1,
-    NEARBY_MATTER_SOURCE_MDNS = 2,
-} nearby_matter_source_t;
+typedef ha_matter_source_t nearby_matter_source_t;
+#define NEARBY_MATTER_SOURCE_BLE HA_MATTER_SOURCE_BLE
+#define NEARBY_MATTER_SOURCE_MDNS HA_MATTER_SOURCE_MDNS
 
-typedef struct {
-    nearby_matter_source_t source;
-    bool has_discriminator;
-    uint16_t discriminator;
-    bool has_vendor_product;
-    uint16_t vendor_id;
-    uint16_t product_id;
+typedef ha_matter_discovery_facts_t nearby_matter_discovery_facts_t;
 
-    bool has_advertisement_version;
-    uint8_t advertisement_version;
-    bool has_opcode;
-    uint8_t opcode;
-    bool has_additional_data_flags;
-    uint8_t additional_data_flags;
-
-    bool has_commissioning_mode;
-    uint8_t commissioning_mode;
-    bool has_device_type;
-    uint32_t device_type;
-} nearby_matter_discovery_facts_t;
-
+/* Legacy symbols retained until the Phase 2 semantic migration. */
 nearby_matter_parse_result_t nearby_matter_from_ble(
     const nearby_ble_normalized_t *ble,
     nearby_matter_discovery_facts_t *out);

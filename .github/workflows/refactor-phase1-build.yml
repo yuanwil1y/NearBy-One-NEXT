@@ -1,0 +1,46 @@
+name: Refactor Phase 1 API skeleton
+
+on:
+  push:
+    branches:
+      - refactor/native-kismet-baseline
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile public API ownership contract
+        run: bash tests/host/run_phase1_public_api_test.sh
+      - name: Run parser and dedup regression vectors
+        run: |
+          INC="-Ifirmware/components/discovery_parser/include -Ifirmware/components/wireshark/include -Ifirmware/components/kismet/include -Ifirmware/components/home_assistant/include"
+          gcc -std=c11 -Wall -Wextra -Werror $INC firmware/components/discovery_parser/ble_ad_parser.c tests/host/test_ble_discovery.c -o /tmp/test_ble && /tmp/test_ble
+          gcc -std=c11 -Wall -Wextra -Werror $INC firmware/components/discovery_parser/mdns_parser.c firmware/components/discovery_parser/ssdp_parser.c firmware/components/discovery_parser/dhcp_parser.c tests/host/test_lan_discovery.c -o /tmp/test_lan && /tmp/test_lan
+          gcc -std=c11 -Wall -Wextra -Werror $INC firmware/components/discovery_parser/wifi_management_parser.c tests/host/test_wifi_discovery.c -o /tmp/test_wifi && /tmp/test_wifi
+          gcc -std=c11 -Wall -Wextra -Werror $INC firmware/components/discovery_parser/i154_mac_parser.c firmware/components/discovery_parser/zigbee_discovery.c tests/host/test_i154_zigbee.c -o /tmp/test_i154 && /tmp/test_i154
+          gcc -std=c11 -Wall -Wextra -Werror $INC firmware/components/discovery_parser/ble_ad_parser.c firmware/components/discovery_parser/matcher_keys.c firmware/components/discovery_parser/matter_discovery.c tests/host/test_matter_discovery.c -o /tmp/test_matter && /tmp/test_matter
+          gcc -std=c11 -Wall -Wextra -Werror $INC -Itests/host/fixtures/c_current firmware/components/discovery_parser/matcher_keys.c firmware/components/discovery_parser/transport_dedup.c tests/host/test_dedup_matcher_keys.c -o /tmp/test_dedup && /tmp/test_dedup
+      - name: Run malformed parser sanitizer regression
+        run: |
+          INC="-Ifirmware/components/discovery_parser/include -Ifirmware/components/wireshark/include -Ifirmware/components/kismet/include -Ifirmware/components/home_assistant/include"
+          gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer $INC firmware/components/discovery_parser/ble_ad_parser.c firmware/components/discovery_parser/mdns_parser.c firmware/components/discovery_parser/ssdp_parser.c firmware/components/discovery_parser/dhcp_parser.c firmware/components/discovery_parser/wifi_management_parser.c firmware/components/discovery_parser/i154_mac_parser.c firmware/components/discovery_parser/zigbee_discovery.c tests/host/test_parser_fuzz.c -o /tmp/test_fuzz
+          /tmp/test_fuzz
+
+  esp-idf-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build ESP32-C6 firmware with ESP-IDF v6.1
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.1
+          target: esp32c6
+          path: firmware
+          command: idf.py build
